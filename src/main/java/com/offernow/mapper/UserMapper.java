@@ -6,14 +6,13 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 
 /**
- * 用户表 Mapper 接口
+ * 用户表 Mapper。
  */
 @Mapper
 public interface UserMapper extends BaseMapper<User> {
+
     /**
-     * 根据用户名查询用户
-     * @param username 用户名
-     * @return 用户实体
+     * 根据用户名查询用户。
      */
     @Select("SELECT * FROM users WHERE username = #{username}")
     User selectByUsername(String username);

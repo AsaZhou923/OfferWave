@@ -9,18 +9,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 全局异常处理器
+ * 全局异常处理器。
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     /**
-     * 处理权限不足异常
+     * 处理权限不足异常。
      */
     @ExceptionHandler(PrivilegeException.class)
-    @ResponseStatus(HttpStatus.FORBIDDEN) // 返回 HTTP 403
+    @ResponseStatus(HttpStatus.FORBIDDEN)
     public R<Object> handlePrivilegeException(PrivilegeException ex) {
-        // 根据 API 文档，失败时需要返回引导升级的 data
         Map<String, Object> data = new HashMap<>();
         data.put("upgrade_url", "/memberships");
         R<Object> r = R.error(403, ex.getMessage());
@@ -28,12 +27,12 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理其他通用异常 (可选，作为兜底)
+     * 处理兜底异常。
      */
     @ExceptionHandler(Exception.class)
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR) // 返回 HTTP 500
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public R<String> handleException(Exception ex) {
-        ex.printStackTrace(); // 在生产环境中应使用日志记录
+        ex.printStackTrace();
         return R.error("服务器内部错误: " + ex.getMessage());
     }
 }

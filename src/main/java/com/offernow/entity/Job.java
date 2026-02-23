@@ -4,127 +4,86 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import java.io.Serializable;
-import java.time.LocalDateTime;
 import lombok.Data;
 
+import java.io.Serializable;
+import java.time.LocalDateTime;
+
 /**
- * 职位信息主表
+ * 职位表实体。
  */
-@TableName(value ="jobs")
+@TableName(value = "jobs")
 @Data
 public class Job implements Serializable {
-    /**
-     * 主键，自增
-     */
+
+    /** 主键 ID */
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /**
-     * 公司名称 (索引)
-     */
+    /** 公司名称 */
     private String companyName;
 
-    /**
-     * 公司类型 (国企/外企等)
-     */
+    /** 公司类型 */
     private String companyType;
-    
-    /**
-     * 公司所属行业(互联网/电商等)
-     */
+
+    /** 所属行业 */
     private String companyBusiness;
 
-    /**
-     * 岗位名称 (索引，支持模糊搜索)
-     */
+    /** 职位名称 */
     private String jobTitle;
 
-    /**
-     * 工作地点 (索引)
-     */
+    /** 工作城市 */
     private String city;
 
-    /**
-     * 招聘类型 (春招/秋招/实习)
-     */
+    /** 招聘类型 */
     private String recruitType;
 
-    /**
-     * 招聘对象 (如：2026届)
-     */
+    /** 招聘对象 */
     private String targetAudience;
 
-    /**
-     * 招聘公告
-     */
+    /** 职位公告 */
     private String announcement;
 
-    /**
-     * 薪资范围 (用于高级筛选)
-     */
+    /** 薪资范围文本 */
     private String salaryRange;
 
-    /**
-     * 最低薪资(元/月) - 用于范围筛选
-     */
+    /** 最低薪资 */
     private Integer salaryMin;
 
-    /**
-     * 最高薪资(元/月) - 用于范围筛选
-     */
+    /** 最高薪资 */
     private Integer salaryMax;
 
-    /**
-     * 学历要求 (本科/硕士等)
-     */
+    /** 学历要求 */
     private String education;
 
-    /**
-     * 投递链接
-     */
+    /** 投递链接 */
     private String applyLink;
 
-    /**
-     * 笔试情况
-     */
+    /** 笔试信息 */
     private String testInfo;
 
-    /**
-     * 全局招聘进度
-     */
+    /** 招聘进度 */
     private String processStage;
 
-    /**
-     * 截止日期 (日期或招满即止)
-     */
+    /** 截止日期 */
     private String deadline;
 
-    /**
-     * 爬虫去重哈希 (MD5)
-     */
+    /** 去重哈希 */
     private String uniqueHash;
 
-    /**
-     * 数据来源 (爬虫/人工/用户投稿)
-     */
+    /** 数据来源 */
     private String sourceOrigin;
 
-    /**
-     * 审核状态 (0:待审, 1:上线, 2:拒绝)
-     */
+    /** 审核状态（0:待审,1:上线,2:拒绝） */
     private Integer auditStatus;
 
-    /**
-     * 入库时间
-     */
+    /** 创建时间 */
     private LocalDateTime createdAt;
 
-    /**
-     * 更新时间 (用于排序)
-     */
+    /** 更新时间 */
     private LocalDateTime updatedAt;
 
+    /** 是否临近截止（非持久化字段） */
     @TableField(exist = false)
     private Boolean isUrgent;
 

@@ -12,16 +12,19 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 会员信息公开接口控制器。
+ */
 @RestController
 @RequestMapping("/api/v1")
-@Tag(name = "公共模块", description = "无需登录即可访问的接口")
+@Tag(name = "公开模块", description = "无需登录即可访问的公开接口")
 public class MembershipController {
 
     @Autowired
     private UserService userService;
 
     @GetMapping("/memberships")
-    @Operation(summary = "获取会员等级列表", description = "获取所有可用的会员等级及其价格、权益，用于“会员购买”页面展示。")
+    @Operation(summary = "获取会员等级列表", description = "返回可用会员等级、价格和权益信息")
     public R<List<Membership>> getAllMemberships() {
         List<Membership> memberships = userService.listMemberships();
         return R.success(memberships);

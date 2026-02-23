@@ -20,10 +20,13 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+/**
+ * 用户个人中心控制器。
+ */
 @RestController
 @RequestMapping("/api/v1/user")
-@Tag(name = "用户个人中心", description = "管理用户个人信息、偏好、会员状态和职位追踪")
-@SecurityRequirement(name = "Authorization") // 标记所有接口需要认�?
+@Tag(name = "用户个人中心", description = "管理用户资料、偏好、会员状态与职位追踪")
+@SecurityRequirement(name = "Authorization")
 public class UserController {
 
     @Autowired
@@ -33,9 +36,7 @@ public class UserController {
     private TrackingService trackingService;
 
     /**
-     * �?Spring Security 上下文中获取当前登录的用户信�?
-     * 
-     * @return 如果用户已登录，返回 User 对象；否则返�?null
+     * 从 Spring Security 上下文获取当前登录用户。
      */
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -46,12 +47,15 @@ public class UserController {
         return null;
     }
 
+    /**
+     * 统一处理未登录返回。
+     */
     private R<Object> handleUnauthenticatedUser() {
         return R.error(401, "用户未登录或认证信息无效");
     }
 
     @GetMapping("/me")
-    @Operation(summary = "获取个人信息 (含权益)", description = "获取当前登录用户的详细信息，包括求职偏好、会员权益详情以及统计数据")
+    @Operation(summary = "获取个人信息", description = "返回当前登录用户的个人信息、偏好和会员信息")
     public R<?> getMyInfo() {
         User currentUser = getCurrentUser();
         if (currentUser == null)
@@ -61,7 +65,7 @@ public class UserController {
     }
 
     @PutMapping("/preferences")
-    @Operation(summary = "更新求职偏好", description = "更新用户的求职意向，用于首页推荐算法")
+    @Operation(summary = "更新求职偏好", description = "更新用户求职偏好设置")
     public R<?> updateMyPreferences(@RequestBody UserPreferenceDto preferenceDto) {
         User currentUser = getCurrentUser();
         if (currentUser == null)
@@ -75,7 +79,7 @@ public class UserController {
     }
 
     @PostMapping("/membership/upgrade")
-    @Operation(summary = "模拟购买/升级会员 (MVP)", description = "开发测试专用接口。将当前用户直接升级为指定等级")
+    @Operation(summary = "模拟升级会员", description = "开发测试接口：将当前用户升级到目标会员等级")
     public R<?> upgradeMyMembership(@RequestBody UpgradeMembershipDto upgradeDto) {
         User currentUser = getCurrentUser();
         if (currentUser == null)
@@ -88,7 +92,7 @@ public class UserController {
     }
 
     @PostMapping("/jobs/{job_id}/status")
-    @Operation(summary = "更新职位状态(收藏/投递)", description = "用户手动标记某个职位的状态")
+    @Operation(summary = "更新职位状态", description = "更新职位收藏/投递状态")
     public R<?> updateJobStatus(@Parameter(description = "职位ID") @PathVariable("job_id") Long jobId,
             @RequestBody UpdateJobStatusDto statusDto) {
         User currentUser = getCurrentUser();
@@ -99,8 +103,8 @@ public class UserController {
     }
 
     @GetMapping("/my-jobs")
-    @Operation(summary = "获取我的职位列表", description = "获取用户“收藏夹”或“投递进度表”的数据")
-    public R<?> getMyJobs(@Parameter(description = "'collected' (仅收�? �?'delivered' (已投�?") @RequestParam String type,
+    @Operation(summary = "获取我的职位列表", description = "按类型返回用户收藏或已投递的职位")
+    public R<?> getMyJobs(@Parameter(description = "type: collected 或 delivered") @RequestParam String type,
             @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
             @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size) {
         User currentUser = getCurrentUser();

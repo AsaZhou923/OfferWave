@@ -33,7 +33,9 @@ CREATE TABLE `jobs` (
 
 CREATE TABLE `users` (
   `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键，自增',
-  `wechat_openid` VARCHAR(64) NOT NULL COMMENT '微信唯一标识 (唯一索引)',
+  `username` VARCHAR(50) NOT NULL COMMENT '登录账号(可以是手机号/邮箱/自定义字母)',
+  `password_hash` VARCHAR(255) NOT NULL COMMENT 'BCrypt密码哈希值',
+  `wechat_openid` VARCHAR(64) DEFAULT NULL COMMENT '微信唯一标识 (唯一索引)',
   `nickname` VARCHAR(64) DEFAULT NULL COMMENT '用户昵称',
   `membership_id` INT NOT NULL DEFAULT 1 COMMENT '会员等级 (关联等级表 ID)',
   `pref_industry` VARCHAR(255) DEFAULT NULL COMMENT '偏好行业 (建议存储 JSON 数组或逗号分隔)',
@@ -46,6 +48,7 @@ CREATE TABLE `users` (
 
   -- 索引设计
   UNIQUE INDEX `uk_wechat_openid` (`wechat_openid`) COMMENT '保证每个微信用户全局唯一',
+  UNIQUE INDEX `uk_username` (`username`) COMMENT '确保账号不重复',
   INDEX `idx_membership` (`membership_id`) COMMENT '用于统计不同等级的用户分布'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户基础信息表';
 

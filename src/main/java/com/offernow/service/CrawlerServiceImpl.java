@@ -15,56 +15,57 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * 爬虫数据同步服务实现。
+ */
 @Service
 public class CrawlerServiceImpl implements CrawlerService {
 
+    /** 职位数据访问 */
     @Autowired
     private JobMapper jobMapper;
 
     @Override
-    @Transactional // 保证整个同步操作的原子性
+    @Transactional
     public Map<String, Integer> syncJobs(CrawlerSyncDto syncDto) {
         int receivedCount = syncDto.getItems().size();
         int insertedCount = 0;
         int updatedCount = 0;
 
-        // 1. 一次性查询出所有已存在的 jobs
+        // 1) 批量查询已存在职位（按 unique_hash）
         List<String> hashes = syncDto.getItems().stream()
-                                     .map(CrawlerJobItemDto::getUniqueHash)
-                                     .collect(Collectors.toList());
+                .map(CrawlerJobItemDto::getUniqueHash)
+                .collect(Collectors.toList());
         LambdaQueryWrapper<Job> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.in(Job::getUniqueHash, hashes);
         List<Job> existingJobs = jobMapper.selectList(queryWrapper);
         Map<String, Job> existingJobsMap = existingJobs.stream()
-                                                       .collect(Collectors.toMap(Job::getUniqueHash, job -> job));
+                .collect(Collectors.toMap(Job::getUniqueHash, job -> job));
 
-        // 2. 遍历上报数据，进行更新或插入
+        // 2) 逐条同步：存在则更新，不存在则插入
         for (CrawlerJobItemDto itemDto : syncDto.getItems()) {
             Job existingJob = existingJobsMap.get(itemDto.getUniqueHash());
             if (existingJob != null) {
-                // 更新
                 Job jobToUpdate = new Job();
                 jobToUpdate.setId(existingJob.getId());
-                // 只更新可能变化的字段
+                // 仅更新可能变化字段
                 jobToUpdate.setProcessStage(itemDto.getProcessStage());
                 jobToUpdate.setDeadline(itemDto.getDeadline());
                 jobToUpdate.setSalaryRange(itemDto.getSalaryRange());
                 jobToUpdate.setSalaryMin(itemDto.getSalaryMin());
                 jobToUpdate.setSalaryMax(itemDto.getSalaryMax());
-                // 其他字段...
                 jobMapper.updateById(jobToUpdate);
                 updatedCount++;
             } else {
-                // 插入
                 Job newJob = new Job();
                 BeanUtils.copyProperties(itemDto, newJob);
-                newJob.setAuditStatus(0); // 新增数据默认为待审核
+                newJob.setAuditStatus(0); // 新数据默认待审核
                 jobMapper.insert(newJob);
                 insertedCount++;
             }
         }
 
-        // 3. 组装返回结果
+        // 3) 返回同步统计
         Map<String, Integer> result = new HashMap<>();
         result.put("received_count", receivedCount);
         result.put("inserted_count", insertedCount);

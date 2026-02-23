@@ -15,16 +15,18 @@ import java.util.Map;
 import java.util.function.Function;
 
 /**
- * JWT 工具类，用于生成、解析和验证 Token
+ * JWT 工具类：负责生成、解析和校验 Token。
  */
 @Component
 public class JwtUtil implements Serializable {
 
     private static final long serialVersionUID = -2550185165626007488L;
 
+    /** JWT 签名密钥 */
     @Value("${offernow.jwt.secret}")
     private String secret;
 
+    /** Token 过期时间（毫秒） */
     @Value("${offernow.jwt.expiration}")
     private Long expiration;
 
@@ -33,21 +35,21 @@ public class JwtUtil implements Serializable {
     }
 
     /**
-     * 从 token 中获取主题 (例如，用户的 openid)
+     * 从 token 中获取主题（用户标识）。
      */
     public String getSubjectFromToken(String token) {
         return getClaimFromToken(token, Claims::getSubject);
     }
 
     /**
-     * 从 token 中获取过期时间
+     * 从 token 中获取过期时间。
      */
     public Date getExpirationDateFromToken(String token) {
         return getClaimFromToken(token, Claims::getExpiration);
     }
 
     /**
-     * 从 token 中获取指定的 claim
+     * 从 token 中提取指定 claim。
      */
     public <T> T getClaimFromToken(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = getAllClaimsFromToken(token);
@@ -55,14 +57,14 @@ public class JwtUtil implements Serializable {
     }
 
     /**
-     * 解析 token，获取所有 claims
+     * 解析 token，获取全部 claims。
      */
     private Claims getAllClaimsFromToken(String token) {
         return Jwts.parserBuilder().setSigningKey(getSigningKey()).build().parseClaimsJws(token).getBody();
     }
 
     /**
-     * 检查 token 是否已过期
+     * 判断 token 是否过期。
      */
     private Boolean isTokenExpired(String token) {
         final Date expirationDate = getExpirationDateFromToken(token);
@@ -70,9 +72,7 @@ public class JwtUtil implements Serializable {
     }
 
     /**
-     * 为指定用户生成 token
-     * @param subject 用户唯一标识，这里我们使用 openid
-     * @return JWT
+     * 为指定用户生成 token。
      */
     public String generateToken(String subject) {
         Map<String, Object> claims = new HashMap<>();
@@ -93,10 +93,7 @@ public class JwtUtil implements Serializable {
     }
 
     /**
-     * 验证 token 是否有效
-     * @param token 待验证的 token
-     * @param subject 用户唯一标识
-     * @return 如果 token 有效则返回 true
+     * 校验 token 是否有效。
      */
     public Boolean validateToken(String token, String subject) {
         final String tokenSubject = getSubjectFromToken(token);

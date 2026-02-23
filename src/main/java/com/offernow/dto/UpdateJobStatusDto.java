@@ -5,6 +5,9 @@ import lombok.Data;
 
 import java.io.Serializable;
 
+/**
+ * 更新职位状态请求 DTO。
+ */
 @Data
 @Schema(description = "更新职位状态的数据模型")
 public class UpdateJobStatusDto implements Serializable {
@@ -14,9 +17,9 @@ public class UpdateJobStatusDto implements Serializable {
     @Schema(description = "是否收藏")
     private Boolean isCollected;
 
-    @Schema(description = "投递状态码 (见API文档枚举)")
+    @Schema(description = "投递状态码（见接口文档枚举）")
     private Integer deliveryStatus;
 
-    @Schema(description = "用户备注 (限200字)")
+    @Schema(description = "用户备注（最多 200 字）")
     private String userNote;
 }
