@@ -25,8 +25,8 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/v1/user")
-@Tag(name = "用户个人中心", description = "管理用户资料、偏好、会员状态与职位追踪")
-@SecurityRequirement(name = "Authorization")
+@Tag(name = "用户个人中心", description = "管理用户个人信息、偏好、会员状态和职位追踪")
+@SecurityRequirement(name = "Authorization") // 标记所有接口需要认证
 public class UserController {
 
     @Autowired
@@ -36,7 +36,9 @@ public class UserController {
     private TrackingService trackingService;
 
     /**
-     * 从 Spring Security 上下文获取当前登录用户。
+     * 从 Spring Security 上下文中获取当前登录的用户信息
+     * 
+     * @return 如果用户已登录，返回 User 对象；否则返回 null
      */
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -103,8 +105,8 @@ public class UserController {
     }
 
     @GetMapping("/my-jobs")
-    @Operation(summary = "获取我的职位列表", description = "按类型返回用户收藏或已投递的职位")
-    public R<?> getMyJobs(@Parameter(description = "type: collected 或 delivered") @RequestParam String type,
+    @Operation(summary = "获取我的职位列表", description = "获取用户“收藏夹”或“投递进度表”的数据")
+    public R<?> getMyJobs(@Parameter(description = "'collected' (仅收藏) 或 'delivered' (已投递)") @RequestParam String type,
             @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
             @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size) {
         User currentUser = getCurrentUser();
