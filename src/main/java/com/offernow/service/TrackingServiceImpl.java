@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -91,7 +92,10 @@ public class TrackingServiceImpl implements TrackingService {
         List<Job> jobs = jobMapper.selectBatchIds(jobIds);
         // 按原 jobIds 的顺序排序
         Map<Long, Job> jobMap = jobs.stream().collect(Collectors.toMap(Job::getId, j -> j));
-        List<Job> sortedJobs = jobIds.stream().map(jobMap::get).collect(Collectors.toList());
+        List<Job> sortedJobs = jobIds.stream()
+                .map(jobMap::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
 
         jobPage.setRecords(sortedJobs);
         jobPage.setTotal(statusPage.getTotal());
@@ -101,7 +105,14 @@ public class TrackingServiceImpl implements TrackingService {
 
     private void checkUserPrivileges(Long userId) {
         User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new PrivilegeException("用户不存在，无法校验追踪权限");
+        }
+
         Membership membership = membershipMapper.selectById(user.getMembershipId());
+        if (membership == null) {
+            return; // 没有会员信息时按不限制处理
+        }
 
         if (membership.getPrivileges() == null)
             return; // 无权益配置，不限制
