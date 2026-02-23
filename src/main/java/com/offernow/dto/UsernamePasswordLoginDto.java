@@ -6,7 +6,7 @@ import lombok.Data;
 import java.io.Serializable;
 
 /**
- * 用户名密码登录请求的数据传输对象 (DTO)
+ * 用户名密码登录请求 DTO。
  */
 @Data
 public class UsernamePasswordLoginDto implements Serializable {

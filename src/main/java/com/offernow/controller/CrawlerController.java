@@ -14,9 +14,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
+/**
+ * 内部爬虫数据接入控制器。
+ */
 @RestController
 @RequestMapping("/api/v1/internal/crawler")
-@Tag(name = "内部模块 - 爬虫", description = "供内部爬虫程序调用的数据同步接口")
+@Tag(name = "内部模块-爬虫", description = "供内部爬虫程序调用的数据同步接口")
 @SecurityRequirement(name = "ApiKeyAuth")
 public class CrawlerController {
 
@@ -24,7 +27,7 @@ public class CrawlerController {
     private CrawlerService crawlerService;
 
     @PostMapping("/sync")
-    @Operation(summary = "批量上报招聘数据", description = "接收爬虫清洗后的结构化数据列表，进行去重和更新。")
+    @Operation(summary = "批量同步招聘数据", description = "接收爬虫清洗后的结构化职位数据，执行去重与更新")
     public R<Map<String, Integer>> syncData(@RequestBody CrawlerSyncDto syncDto) {
         if (syncDto == null || syncDto.getItems() == null || syncDto.getItems().isEmpty()) {
             return R.error(400, "items 列表不能为空");

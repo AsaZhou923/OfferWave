@@ -16,9 +16,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 公开职位查询控制器。
+ */
 @RestController
 @RequestMapping("/api/v1/jobs")
-@Tag(name = "公共职位查询模块", description = "提供职位公开检索、筛选和详情展示")
+@Tag(name = "公开职位查询", description = "提供职位公开搜索、筛选和详情展示")
 @SecurityRequirement(name = "Authorization")
 public class JobController {
 
@@ -26,7 +29,7 @@ public class JobController {
     private JobService jobService;
 
     @GetMapping
-    @Operation(summary = "获取职位列表", description = "公开列表接口。若请求携带有效 Token，后端会识别会员等级并返回对应数量。")
+    @Operation(summary = "获取职位列表", description = "支持关键词、城市、类型、薪资和排序筛选")
     public R<Page<Job>> searchJobs(
             @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
             @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size,
@@ -44,7 +47,7 @@ public class JobController {
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "获取职位详情", description = "返回职位公开详情。若用户已登录，同时返回 my_status。")
+    @Operation(summary = "获取职位详情", description = "返回职位公开详情；登录后可附带我的状态")
     public R<JobDetailDto> getJobById(@Parameter(description = "职位 ID") @PathVariable Long id) {
         JobDetailDto jobDetail = jobService.getJobDetail(id);
         if (jobDetail == null) {

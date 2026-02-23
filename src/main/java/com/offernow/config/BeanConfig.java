@@ -13,14 +13,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestTemplate;
 
 /**
- * 应用全局 Bean 配置
+ * 应用全局 Bean 配置。
  */
 @Configuration
 public class BeanConfig {
 
     /**
-     * �?RestTemplate 注册�?Spring Bean
-     * @return RestTemplate 实例
+     * 注册 RestTemplate 供服务层调用外部 HTTP 接口。
      */
     @Bean
     public RestTemplate restTemplate() {
@@ -28,30 +27,27 @@ public class BeanConfig {
     }
 
     /**
-     * 添加 MyBatis-Plus 分页插件
-     *
-     * @return MybatisPlusInterceptor 实例
+     * 配置 MyBatis-Plus 分页插件。
      */
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
-        // 添加针对 MySQL 数据库的分页内部拦截�?
+        // 指定数据库类型为 MySQL，启用分页 SQL 拦截与改写
         interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
         return interceptor;
     }
 
     /**
-     * 配置 Knife4j/OpenAPI 的全局信息和安全认�?
-     * @return OpenAPI
+     * 配置 OpenAPI 基础信息与全局 JWT 鉴权方案。
      */
     @Bean
     public OpenAPI customOpenAPI() {
         final String securitySchemeName = "Authorization";
         return new OpenAPI()
                 .info(new Info().title("OfferNow API").version("1.0").description("OfferNow 平台接口文档"))
-                // 添加全局安全需求，�?BearerAuth 应用于所有端�?
+                // 声明全局安全需求：接口默认需要携带 Authorization
                 .addSecurityItem(new SecurityRequirement().addList(securitySchemeName))
-                // 定义安全方案
+                // 定义 HTTP Bearer JWT 鉴权方式
                 .components(
                         new Components()
                                 .addSecuritySchemes(securitySchemeName,
@@ -64,4 +60,3 @@ public class BeanConfig {
                 );
     }
 }
-

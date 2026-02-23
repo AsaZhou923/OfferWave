@@ -4,55 +4,41 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import java.io.Serializable;
-import java.time.LocalDateTime;
 import lombok.Data;
 
+import java.io.Serializable;
+import java.time.LocalDateTime;
+
 /**
- * 用户-职位交互状态表 (收藏与追踪)
+ * 用户-职位状态表实体（收藏/投递）。
  */
-@TableName(value ="user_job_status")
+@TableName(value = "user_job_status")
 @Data
 public class UserJobStatus implements Serializable {
-    /**
-     * 主键，自增
-     */
+
+    /** 主键 ID */
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /**
-     * 关联用户 ID (外键)
-     */
+    /** 用户 ID */
     private Long userId;
 
-    /**
-     * 关联职位 ID (外键)
-     */
+    /** 职位 ID */
     private Long jobId;
 
-    /**
-     * 是否收藏 (TRUE: 是, FALSE: 否)
-     */
+    /** 是否收藏 */
     private Boolean isCollected;
 
-    /**
-     * 投递状态 (0:未投, 1:已投, 2:笔试, 3:面试, 4:录用, 5:感谢信)
-     */
+    /** 投递状态（0-5） */
     private Integer deliveryStatus;
 
-    /**
-     * 用户个人备注
-     */
+    /** 用户备注 */
     private String userNote;
 
-    /**
-     * 状态最后变更时间
-     */
+    /** 更新时间 */
     private LocalDateTime updatedAt;
 
-    /**
-     * 首次关联时间
-     */
+    /** 创建时间 */
     private LocalDateTime createdAt;
 
     @TableField(exist = false)

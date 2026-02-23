@@ -13,21 +13,21 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 /**
- * 认证模块控制器
+ * 认证模块控制器。
  */
 @RestController
 @RequestMapping("/api/v1/auth")
-@Tag(name = "认证模块", description = "处理用户登录与注册")
+@Tag(name = "认证模块", description = "处理用户注册与登录")
 public class AuthController {
 
     @Autowired
     private AuthService authService;
 
     /**
-     * 用户名密码登录
+     * 用户名密码登录。
      */
     @PostMapping("/login")
-    @Operation(summary = "用户名密码登录", description = "用户通过用户名和密码获取 Token")
+    @Operation(summary = "用户名密码登录", description = "用户通过用户名和密码获取 JWT Token")
     public R<Map<String, Object>> login(@Validated @RequestBody UsernamePasswordLoginDto loginDto) {
         try {
             Map<String, Object> responseData = authService.login(loginDto);
@@ -38,7 +38,7 @@ public class AuthController {
     }
 
     /**
-     * 用户注册
+     * 用户注册。
      */
     @PostMapping("/register")
     @Operation(summary = "用户注册", description = "新用户通过用户名和密码进行注册")

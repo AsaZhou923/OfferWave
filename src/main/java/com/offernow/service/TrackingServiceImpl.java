@@ -12,8 +12,8 @@ import com.offernow.entity.User;
 import com.offernow.entity.UserJobStatus;
 import com.offernow.mapper.JobMapper;
 import com.offernow.mapper.MembershipMapper;
-import com.offernow.mapper.UserMapper;
 import com.offernow.mapper.UserJobStatusMapper;
+import com.offernow.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -22,18 +22,25 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+/**
+ * 职位追踪服务实现。
+ */
 @Service
 public class TrackingServiceImpl implements TrackingService {
 
+    /** 用户-职位状态数据访问 */
     @Autowired
     private UserJobStatusMapper userJobStatusMapper;
 
+    /** 用户数据访问 */
     @Autowired
     private UserMapper userMapper;
 
+    /** 会员数据访问 */
     @Autowired
     private MembershipMapper membershipMapper;
 
+    /** 职位数据访问 */
     @Autowired
     private JobMapper jobMapper;
 
@@ -43,9 +50,9 @@ public class TrackingServiceImpl implements TrackingService {
         queryWrapper.eq(UserJobStatus::getUserId, userId).eq(UserJobStatus::getJobId, jobId);
         UserJobStatus status = userJobStatusMapper.selectOne(queryWrapper);
 
-        // 如果是新追踪一个职位
+        // 不存在则创建状态，存在则更新状态
         if (status == null) {
-            checkUserPrivileges(userId); // 检查权益
+            checkUserPrivileges(userId);
             status = new UserJobStatus();
             status.setUserId(userId);
             status.setJobId(jobId);
@@ -54,7 +61,6 @@ public class TrackingServiceImpl implements TrackingService {
             status.setUserNote(dto.getUserNote());
             userJobStatusMapper.insert(status);
         } else {
-            // 更新现有状态
             if (dto.getIsCollected() != null)
                 status.setIsCollected(dto.getIsCollected());
             if (dto.getDeliveryStatus() != null)
@@ -75,7 +81,7 @@ public class TrackingServiceImpl implements TrackingService {
         } else if ("delivered".equals(type)) {
             statusWrapper.gt(UserJobStatus::getDeliveryStatus, 0);
         } else {
-            // 如果类型无效，返回空分页
+            // type 非法，返回空分页
             return new Page<>();
         }
         statusWrapper.orderByDesc(UserJobStatus::getUpdatedAt);
@@ -86,11 +92,11 @@ public class TrackingServiceImpl implements TrackingService {
 
         Page<Job> jobPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
         if (jobIds.isEmpty()) {
-            return jobPage; // 返回空的职位分页
+            return jobPage;
         }
 
+        // 批量查询职位并按状态分页结果原顺序回填
         List<Job> jobs = jobMapper.selectBatchIds(jobIds);
-        // 按原 jobIds 的顺序排序
         Map<Long, Job> jobMap = jobs.stream().collect(Collectors.toMap(Job::getId, j -> j));
         List<Job> sortedJobs = jobIds.stream()
                 .map(jobMap::get)
@@ -103,6 +109,9 @@ public class TrackingServiceImpl implements TrackingService {
         return jobPage;
     }
 
+    /**
+     * 检查用户是否超过会员可追踪职位数量上限。
+     */
     private void checkUserPrivileges(Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
@@ -115,13 +124,13 @@ public class TrackingServiceImpl implements TrackingService {
         }
 
         if (membership.getPrivileges() == null)
-            return; // 无权益配置，不限制
+            return;
 
         JSONObject privileges = JSONUtil.parseObj(membership.getPrivileges());
         Integer maxTrack = privileges.getInt("max_job_track");
 
         if (maxTrack == null || maxTrack == -1 || maxTrack == 999)
-            return; // -1 或 999 代表无限
+            return;
 
         LambdaQueryWrapper<UserJobStatus> countWrapper = new LambdaQueryWrapper<>();
         countWrapper.eq(UserJobStatus::getUserId, userId);
@@ -129,7 +138,7 @@ public class TrackingServiceImpl implements TrackingService {
         long currentCount = userJobStatusMapper.selectCount(countWrapper);
 
         if (currentCount >= maxTrack) {
-            throw new PrivilegeException("普通用户只能追踪 " + maxTrack + " 个职位，请升级 VIP 解锁无限权益");
+            throw new PrivilegeException("普通用户只能追踪" + maxTrack + "个职位，请升级 VIP 解锁无限权益");
         }
     }
 }

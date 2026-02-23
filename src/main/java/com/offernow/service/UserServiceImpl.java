@@ -19,17 +19,22 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
+/**
+ * 用户与会员服务实现。
+ */
 @Service
 public class UserServiceImpl implements UserService {
 
+    /** 用户数据访问 */
     @Autowired
     private UserMapper userMapper;
 
+    /** 会员数据访问 */
     @Autowired
     private MembershipMapper membershipMapper;
 
+    /** 用户职位状态数据访问 */
     @Autowired
     private UserJobStatusMapper userJobStatusMapper;
 
@@ -42,17 +47,16 @@ public class UserServiceImpl implements UserService {
 
         Membership membership = membershipMapper.selectById(user.getMembershipId());
         if (membership == null) {
-            throw new RuntimeException("会员信息配置错误");
+            throw new RuntimeException("会员配置不存在");
         }
 
-        // 1. 组装用户信息和偏好
+        // 1) 组装基础用户信息与偏好
         Map<String, Object> response = new HashMap<>();
         response.put("id", user.getId());
         response.put("nickname", user.getNickname());
-        response.put("avatar", null); // 暂时为 null
+        response.put("avatar", null);
 
         Map<String, Object> preferences = new HashMap<>();
-        // 将逗号分隔的字符串转为列表
         if (user.getPrefIndustry() != null && !user.getPrefIndustry().isEmpty()) {
             preferences.put("industry", Arrays.asList(user.getPrefIndustry().split(",")));
         } else {
@@ -62,30 +66,27 @@ public class UserServiceImpl implements UserService {
         preferences.put("job", user.getPrefJob());
         response.put("preferences", preferences);
 
-        // 2. 组装会员信息和权益
+        // 2) 组装会员与权益信息
         Map<String, Object> membershipInfo = new HashMap<>();
         membershipInfo.put("id", membership.getId());
         membershipInfo.put("level_name", membership.getLevelName());
-        membershipInfo.put("expire_date", null); // 永久有效
-        // 解析JSON权益
+        membershipInfo.put("expire_date", null);
         if (membership.getPrivileges() != null) {
             JSONObject privilegesJson = JSONUtil.parseObj(membership.getPrivileges());
             membershipInfo.put("privileges", privilegesJson);
         }
         response.put("membership", membershipInfo);
 
-        // 3. 组装统计数据
+        // 3) 组装统计信息
         Map<String, Object> stats = new HashMap<>();
         LambdaQueryWrapper<UserJobStatus> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(UserJobStatus::getUserId, userId);
 
-        // 统计已追踪（收藏或投递）
         queryWrapper.and(wrapper -> wrapper.eq(UserJobStatus::getIsCollected, true)
                 .or()
                 .gt(UserJobStatus::getDeliveryStatus, 0));
         stats.put("tracked_count", userJobStatusMapper.selectCount(queryWrapper));
 
-        // 统计已投递
         LambdaQueryWrapper<UserJobStatus> deliveredWrapper = new LambdaQueryWrapper<>();
         deliveredWrapper.eq(UserJobStatus::getUserId, userId).gt(UserJobStatus::getDeliveryStatus, 0);
         stats.put("delivered_count", userJobStatusMapper.selectCount(deliveredWrapper));
@@ -106,7 +107,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public List<Membership> listMemberships() {
-        // 为了安全，不返回 privileges 字段给前端
+        // 出于安全考虑，不直接对前端透出 privileges 原始字段
         List<Membership> memberships = membershipMapper.selectList(null);
         memberships.forEach(m -> m.setPrivileges(null));
         return memberships;

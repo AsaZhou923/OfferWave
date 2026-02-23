@@ -20,12 +20,20 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * JWT 认证过滤器：
+ * 1) 从 Header / Query / Cookie 中解析 Token
+ * 2) 校验 Token 合法性与过期时间
+ * 3) 将认证后的用户信息写入 Spring Security 上下文
+ */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    /** JWT 工具类，用于解析与校验 Token */
     @Autowired
     private JwtUtil jwtUtil;
 
+    /** 用户数据访问，用于根据 Token 中的用户 ID 查询用户 */
     @Autowired
     private UserMapper userMapper;
 
@@ -33,21 +41,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
 
+        // 第一步：解析请求中的 Token
         String jwtToken = resolveToken(request);
         String userId = null;
 
         if (jwtToken != null) {
             try {
+                // 从 Token 的 subject 中读取用户 ID
                 userId = jwtUtil.getSubjectFromToken(jwtToken);
             } catch (Exception ignored) {
                 userId = null;
             }
         }
 
+        // 第二步：若当前请求尚未认证，则尝试完成认证流程
         if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
                 User user = userMapper.selectById(Long.valueOf(userId));
                 if (user != null && jwtUtil.validateToken(jwtToken, user.getId().toString())) {
+                    // 构造认证信息并写入 SecurityContext，后续接口即可识别已登录用户
                     List<SimpleGrantedAuthority> authorities =
                             Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
                     UsernamePasswordAuthenticationToken authenticationToken =
@@ -56,44 +68,48 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(authenticationToken);
                 }
             } catch (NumberFormatException ignored) {
-                // userId in token is not a valid number
+                // Token 中的 userId 不是有效数字，忽略并按未登录处理
             }
         }
 
+        // 第三步：继续执行后续过滤器链
         chain.doFilter(request, response);
     }
 
+    /**
+     * 多来源解析 Token，兼容新旧客户端。
+     */
     private String resolveToken(HttpServletRequest request) {
         String authorization = request.getHeader("Authorization");
         if (authorization != null && !authorization.isBlank()) {
-            // Standard form: Authorization: Bearer <token>
+            // 标准形式：Authorization: Bearer <token>
             if (authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
                 String token = authorization.substring(7).trim();
-                // Be tolerant of mistaken input like "Bearer Bearer <token>" in API docs UI.
+                // 兼容误填为 "Bearer Bearer <token>" 的情况
                 if (token.regionMatches(true, 0, "Bearer ", 0, 7)) {
                     token = token.substring(7).trim();
                 }
                 return token.isEmpty() ? null : token;
             }
-            // Compatibility form: Authorization: <token>
+            // 兼容形式：Authorization: <token>
             String token = authorization.trim();
             return token.isEmpty() ? null : token;
         }
 
-        // Legacy compatibility: token: <token>
+        // 兼容旧客户端：token: <token>
         String fallbackToken = request.getHeader("token");
         if (fallbackToken != null && !fallbackToken.isBlank()) {
             String token = fallbackToken.trim();
             return token.isEmpty() ? null : token;
         }
 
-        // Query fallback for clients that append token in URL.
+        // 兼容 URL Query 传参：?token=xxx
         String queryToken = request.getParameter("token");
         if (queryToken != null && !queryToken.isBlank()) {
             return queryToken.trim();
         }
 
-        // Cookie fallback for browser clients.
+        // 兼容浏览器 Cookie 透传
         String cookieToken = resolveTokenFromCookies(request);
         if (cookieToken != null) {
             return cookieToken;
@@ -102,6 +118,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return null;
     }
 
+    /**
+     * 从 Cookie 中提取 Token。
+     */
     private String resolveTokenFromCookies(HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {
