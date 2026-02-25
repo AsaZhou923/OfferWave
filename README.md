@@ -53,6 +53,21 @@ src/main/resources
   - `offernow.jwt.secret`
   - `offernow.crawler.api-key`
 
+推荐优先使用环境变量覆盖配置（避免将真实密钥写入仓库）：
+
+| 环境变量 | 说明 |
+| --- | --- |
+| `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` | MySQL 连接信息 |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` / `REDIS_DATABASE` | Redis 连接信息 |
+| `WECHAT_APPID` / `WECHAT_SECRET` | 微信登录配置 |
+| `JWT_SECRET` / `JWT_EXPIRATION` | JWT 密钥与过期时间 |
+| `CRAWLER_API_KEY` | 内部爬虫接口 API Key |
+
+> 未配置环境变量时的影响：
+> - 微信相关变量（`WECHAT_APPID` / `WECHAT_SECRET`）为空不会影响项目启动；仅在你接入微信登录功能时才需要配置。
+> - `CRAWLER_API_KEY` 为空时，`/api/v1/internal/**` 会返回 `503`（表示内部爬虫通道未配置）。
+> - `JWT_SECRET` 未配置会使用开发默认值，仅适用于本地开发，生产环境务必显式配置。
+
 3. 启动服务
 ```bash
 mvn spring-boot:run

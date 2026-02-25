@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 /**
@@ -21,13 +22,19 @@ public class ApiKeyInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull Object handler)
             throws Exception {
-        String apiKey = request.getHeader("X-API-KEY");
+        if (!StringUtils.hasText(configuredApiKey)) {
+            response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+            response.getWriter().write("{\"code\": 503, \"message\": \"Crawler API Key is not configured\"}");
+            return false;
+        }
 
-        if (apiKey == null || !apiKey.equals(configuredApiKey)) {
+        String apiKey = request.getHeader("X-API-KEY");
+        if (!StringUtils.hasText(apiKey) || !apiKey.equals(configuredApiKey)) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.getWriter().write("{\"code\": 401, \"message\": \"Invalid or missing API Key\"}");
             return false;
         }
+
         return true;
     }
 }
