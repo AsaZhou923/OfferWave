@@ -12,17 +12,18 @@ spring:
     name: offernow-backend
   # 数据库连接配置
   datasource:
-    url: jdbc:mysql://34.146.93.206:3306/offer_now?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
-    username: offer
-    password: offert123 # <--- 请替换为你的数据库密码
+    # 建议通过环境变量注入，避免凭据出现在仓库中
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/offer_now?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   # Redis 配置
   data:
     redis:
-      host: 127.0.0.1
-      port: 6379
-      password: # <--- 如果你的 Redis 有密码，请填写
-      database: 0
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
 
 # MyBatis Plus 配置
 mybatis-plus:
@@ -59,12 +60,12 @@ knife4j:
 offernow:
   # 微信登录配置
   wechat:
-    appid: your-wechat-appid       # <--- 请替换为你的微信 AppID
-    secret: your-wechat-secret     # <--- 请替换为你的微信 AppSecret
+    appid: ${WECHAT_APPID:}
+    secret: ${WECHAT_SECRET:}
   # JWT 配置
   jwt:
-    secret: your-jwt-secret-key-that-is-long-enough-to-be-secure # <--- 请替换为你的 JWT 密钥
-    expiration: 86400000 # 24小时 (单位: 毫秒)
+    secret: ${JWT_SECRET:change-me-in-production}
+    expiration: ${JWT_EXPIRATION:86400000} # 24小时 (单位: 毫秒)
   # 内部爬虫 API Key
   crawler:
-    api-key: your-secret-crawler-api-key # <--- 请替换为爬虫模块的 API Key
+    api-key: ${CRAWLER_API_KEY:}

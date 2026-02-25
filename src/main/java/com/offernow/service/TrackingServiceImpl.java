@@ -46,27 +46,42 @@ public class TrackingServiceImpl implements TrackingService {
 
     @Override
     public void updateJobStatus(Long userId, Long jobId, UpdateJobStatusDto dto) {
+        Job job = jobMapper.selectById(jobId);
+        if (job == null) {
+            throw new RuntimeException("职位不存在");
+        }
+
         LambdaQueryWrapper<UserJobStatus> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(UserJobStatus::getUserId, userId).eq(UserJobStatus::getJobId, jobId);
         UserJobStatus status = userJobStatusMapper.selectOne(queryWrapper);
 
         // 不存在则创建状态，存在则更新状态
         if (status == null) {
-            checkUserPrivileges(userId);
             status = new UserJobStatus();
             status.setUserId(userId);
             status.setJobId(jobId);
             status.setIsCollected(dto.getIsCollected() != null && dto.getIsCollected());
             status.setDeliveryStatus(dto.getDeliveryStatus() != null ? dto.getDeliveryStatus() : 0);
             status.setUserNote(dto.getUserNote());
+
+            if (isTracked(status.getIsCollected(), status.getDeliveryStatus())) {
+                checkUserPrivileges(userId);
+            }
             userJobStatusMapper.insert(status);
         } else {
+            boolean wasTracked = isTracked(status.getIsCollected(), status.getDeliveryStatus());
+
             if (dto.getIsCollected() != null)
                 status.setIsCollected(dto.getIsCollected());
             if (dto.getDeliveryStatus() != null)
                 status.setDeliveryStatus(dto.getDeliveryStatus());
             if (dto.getUserNote() != null)
                 status.setUserNote(dto.getUserNote());
+
+            boolean isTrackedNow = isTracked(status.getIsCollected(), status.getDeliveryStatus());
+            if (!wasTracked && isTrackedNow) {
+                checkUserPrivileges(userId);
+            }
             userJobStatusMapper.updateById(status);
         }
     }
@@ -107,6 +122,11 @@ public class TrackingServiceImpl implements TrackingService {
         jobPage.setTotal(statusPage.getTotal());
 
         return jobPage;
+    }
+
+
+    private boolean isTracked(Boolean isCollected, Integer deliveryStatus) {
+        return Boolean.TRUE.equals(isCollected) || (deliveryStatus != null && deliveryStatus > 0);
     }
 
     /**
