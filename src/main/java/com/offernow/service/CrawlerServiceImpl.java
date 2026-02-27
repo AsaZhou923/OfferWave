@@ -9,7 +9,9 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.DigestUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,8 +34,24 @@ public class CrawlerServiceImpl implements CrawlerService {
         int insertedCount = 0;
         int updatedCount = 0;
 
+        // 0) 预处理：去除批次内的重复数据（保留最后一条），防止插入时主键冲突
+        Map<String, CrawlerJobItemDto> distinctItems = syncDto.getItems().stream()
+                .peek(item -> {
+                    // 兜底策略：如果爬虫端未传 uniqueHash，则由后端根据关键字段(公司+职位+城市)生成 MD5
+                    if (item.getUniqueHash() == null || item.getUniqueHash().isEmpty()) {
+                        String raw = item.getCompanyName() + "_" + item.getJobTitle() + "_" + item.getCity();
+                        String hash = DigestUtils.md5DigestAsHex(raw.getBytes(StandardCharsets.UTF_8));
+                        item.setUniqueHash(hash);
+                    }
+                })
+                .collect(Collectors.toMap(CrawlerJobItemDto::getUniqueHash, item -> item, (oldVal, newVal) -> newVal));
+
+        if (distinctItems.isEmpty()) {
+            return Map.of("received_count", receivedCount, "inserted_count", 0, "updated_count", 0);
+        }
+
         // 1) 批量查询已存在职位（按 unique_hash）
-        List<String> hashes = syncDto.getItems().stream()
+        List<String> hashes = distinctItems.values().stream()
                 .map(CrawlerJobItemDto::getUniqueHash)
                 .collect(Collectors.toList());
         LambdaQueryWrapper<Job> queryWrapper = new LambdaQueryWrapper<>();
@@ -43,13 +61,14 @@ public class CrawlerServiceImpl implements CrawlerService {
                 .collect(Collectors.toMap(Job::getUniqueHash, job -> job));
 
         // 2) 逐条同步：存在则更新，不存在则插入
-        for (CrawlerJobItemDto itemDto : syncDto.getItems()) {
+        for (CrawlerJobItemDto itemDto : distinctItems.values()) {
             Job existingJob = existingJobsMap.get(itemDto.getUniqueHash());
             if (existingJob != null) {
                 Job jobToUpdate = new Job();
                 jobToUpdate.setId(existingJob.getId());
                 // 仅更新可能变化字段
                 jobToUpdate.setProcessStage(itemDto.getProcessStage());
+                jobToUpdate.setTargetAudience(itemDto.getTargetAudience());
                 jobToUpdate.setDeadline(itemDto.getDeadline());
                 jobToUpdate.setSalaryRange(itemDto.getSalaryRange());
                 jobToUpdate.setSalaryMin(itemDto.getSalaryMin());

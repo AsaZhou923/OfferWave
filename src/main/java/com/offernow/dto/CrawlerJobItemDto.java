@@ -1,4 +1,4 @@
-package com.offernow.dto;
+﻿package com.offernow.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -14,7 +14,7 @@ public class CrawlerJobItemDto implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    @Schema(description = "核心去重字段（MD5: 公司名+职位名+城市）", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "核心去重字段（MD5: 公司名_职位名_城市）")
     private String uniqueHash;
 
     @Schema(description = "公司名称", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -35,6 +35,9 @@ public class CrawlerJobItemDto implements Serializable {
     @Schema(description = "招聘类型（春招/秋招/实习）", requiredMode = Schema.RequiredMode.REQUIRED)
     private String recruitType;
 
+    @Schema(description = "招聘对象（如：2026届）")
+    private String targetAudience;
+
     @Schema(description = "学历要求")
     private String education;
 
@@ -47,7 +50,7 @@ public class CrawlerJobItemDto implements Serializable {
     @Schema(description = "最高薪资（数值）")
     private Integer salaryMax;
 
-    @Schema(description = "投递链接", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "投递链接")
     private String applyLink;
 
     @Schema(description = "截止日期（YYYY-MM-DD）")

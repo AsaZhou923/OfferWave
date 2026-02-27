@@ -58,6 +58,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
                                 "/api/v1/auth/**",
+                                "/api/v1/internal/**",
                                 "/doc.html",
                                 "/webjars/**",
                                 "/swagger-resources/**",
@@ -86,6 +87,7 @@ public class SecurityConfig {
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList(
                 "Authorization",
+                "X-API-KEY",
                 "Content-Type",
                 "X-Requested-With",
                 "Accept"
