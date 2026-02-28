@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -58,10 +58,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
                 User user = userMapper.selectById(Long.valueOf(userId));
-                if (user != null && jwtUtil.validateToken(jwtToken, user.getId().toString())) {
+                if (user != null
+                        && !Integer.valueOf(0).equals(user.getAccountStatus())
+                        && jwtUtil.validateToken(jwtToken, user.getId().toString())) {
                     // 构造认证信息并写入 SecurityContext，后续接口即可识别已登录用户
-                    List<SimpleGrantedAuthority> authorities =
-                            Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
+                    List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+                    authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
+                    if (Integer.valueOf(1).equals(user.getRole())) {
+                        authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+                    }
                     UsernamePasswordAuthenticationToken authenticationToken =
                             new UsernamePasswordAuthenticationToken(user, null, authorities);
                     authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

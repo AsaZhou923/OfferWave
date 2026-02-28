@@ -44,6 +44,9 @@ public class TrackingServiceImpl implements TrackingService {
     @Autowired
     private JobMapper jobMapper;
 
+    @Autowired
+    private ContentModerationService contentModerationService;
+
     @Override
     public void updateJobStatus(Long userId, Long jobId, UpdateJobStatusDto dto) {
         Job job = jobMapper.selectById(jobId);
@@ -62,7 +65,7 @@ public class TrackingServiceImpl implements TrackingService {
             status.setJobId(jobId);
             status.setIsCollected(dto.getIsCollected() != null && dto.getIsCollected());
             status.setDeliveryStatus(dto.getDeliveryStatus() != null ? dto.getDeliveryStatus() : 0);
-            status.setUserNote(dto.getUserNote());
+            status.setUserNote(contentModerationService.sanitizeUserNote(userId, dto.getUserNote()));
 
             if (isTracked(status.getIsCollected(), status.getDeliveryStatus())) {
                 checkUserPrivileges(userId);
@@ -76,7 +79,7 @@ public class TrackingServiceImpl implements TrackingService {
             if (dto.getDeliveryStatus() != null)
                 status.setDeliveryStatus(dto.getDeliveryStatus());
             if (dto.getUserNote() != null)
-                status.setUserNote(dto.getUserNote());
+                status.setUserNote(contentModerationService.sanitizeUserNote(userId, dto.getUserNote()));
 
             boolean isTrackedNow = isTracked(status.getIsCollected(), status.getDeliveryStatus());
             if (!wasTracked && isTrackedNow) {
@@ -141,6 +144,20 @@ public class TrackingServiceImpl implements TrackingService {
         Membership membership = membershipMapper.selectById(user.getMembershipId());
         if (membership == null) {
             return; // 没有会员信息时按不限制处理
+        }
+
+        if (user.getCustomTrackLimit() != null) {
+            if (user.getCustomTrackLimit() < 0) {
+                return;
+            }
+            LambdaQueryWrapper<UserJobStatus> countWrapper = new LambdaQueryWrapper<>();
+            countWrapper.eq(UserJobStatus::getUserId, userId);
+            countWrapper.and(w -> w.eq(UserJobStatus::getIsCollected, true).or().gt(UserJobStatus::getDeliveryStatus, 0));
+            long currentCount = userJobStatusMapper.selectCount(countWrapper);
+            if (currentCount >= user.getCustomTrackLimit()) {
+                throw new PrivilegeException("当前账号追踪额度已达上限：" + user.getCustomTrackLimit());
+            }
+            return;
         }
 
         if (membership.getPrivileges() == null)

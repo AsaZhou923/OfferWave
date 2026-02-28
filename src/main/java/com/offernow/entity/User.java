@@ -26,6 +26,11 @@ public class User implements Serializable {
     /** BCrypt 密码哈希 */
     private String passwordHash;
 
+    private Integer role;
+
+    /** 账号状态：1-正常，0-封禁 */
+    private Integer accountStatus;
+
     /** 微信 openid（预留） */
     private String wechatOpenid;
 
@@ -49,6 +54,9 @@ public class User implements Serializable {
 
     /** 期望薪资 */
     private Integer salary;
+
+    /** 手工配置追踪额度上限（null 表示按会员权益） */
+    private Integer customTrackLimit;
 
     /** 最后登录时间 */
     private LocalDateTime lastLogin;

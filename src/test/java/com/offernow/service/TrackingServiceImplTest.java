@@ -38,6 +38,9 @@ class TrackingServiceImplTest {
     @Mock
     private JobMapper jobMapper;
 
+    @Mock
+    private ContentModerationService contentModerationService;
+
     @InjectMocks
     private TrackingServiceImpl trackingService;
 
@@ -86,6 +89,7 @@ class TrackingServiceImplTest {
     void shouldSkipPrivilegeCheckWhenAlreadyTracked() {
         UpdateJobStatusDto dto = new UpdateJobStatusDto();
         dto.setUserNote("follow up");
+        when(contentModerationService.sanitizeUserNote(1L, "follow up")).thenReturn("follow up");
 
         Job job = new Job();
         job.setId(3L);

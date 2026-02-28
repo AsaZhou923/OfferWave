@@ -1,12 +1,13 @@
 ﻿# OfferNow Backend
 
-OfferNow 平台后端服务，提供职位查询、用户认证、职位追踪、会员体系及爬虫数据接入能力。
+OfferNow 平台后端服务，提供职位查询、用户认证、职位追踪、会员体系、管理员后台及爬虫数据接入能力。
 
 ## 功能概览
 - 用户注册/登录（JWT）
 - 职位列表与详情查询（支持筛选、排序、分页）
 - 用户个人中心（偏好设置、我的职位、会员升级）
-- 爬虫数据批量同步（基于 `X-API-KEY`）
+- 管理员后台（职位审核/管理、用户管理、敏感词审核、系统配置）
+- 爬虫数据批量同步（仅管理员 JWT 调用）
 - 统一响应结构：`code` / `message` / `data`
 
 ## 技术栈
@@ -27,7 +28,7 @@ src/main/java/com/offernow
 ├─ controller     # API 控制器
 ├─ dto            # 请求/响应 DTO
 ├─ entity         # 数据实体
-├─ interceptor    # JWT 过滤器、API Key 拦截器
+├─ interceptor    # JWT 过滤器
 ├─ mapper         # MyBatis-Plus Mapper
 ├─ service        # 业务逻辑
 └─ util           # JWT 工具等
@@ -51,7 +52,6 @@ src/main/resources
   - `spring.datasource.url/username/password`
   - `spring.data.redis.host/port/password`
   - `offernow.jwt.secret`
-  - `offernow.crawler.api-key`
 
 推荐优先使用环境变量覆盖配置（避免将真实密钥写入仓库）：
 
@@ -61,11 +61,9 @@ src/main/resources
 | `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` / `REDIS_DATABASE` | Redis 连接信息 |
 | `WECHAT_APPID` / `WECHAT_SECRET` | 微信登录配置 |
 | `JWT_SECRET` / `JWT_EXPIRATION` | JWT 密钥与过期时间 |
-| `CRAWLER_API_KEY` | 内部爬虫接口 API Key |
 
 > 未配置环境变量时的影响：
 > - 微信相关变量（`WECHAT_APPID` / `WECHAT_SECRET`）为空不会影响项目启动；仅在你接入微信登录功能时才需要配置。
-> - `CRAWLER_API_KEY` 为空时，`/api/v1/internal/**` 会返回 `503`（表示内部爬虫通道未配置）。
 > - `JWT_SECRET` 未配置会使用开发默认值，仅适用于本地开发，生产环境务必显式配置。
 
 3. 启动服务
@@ -84,9 +82,12 @@ mvn spring-boot:run
 - `Authorization: <token>`（兼容）
 - `token: <token>`（兼容旧客户端）
 
-### API Key 鉴权（内部爬虫接口）
-- 请求头：`X-API-KEY: <your_api_key>`
-- 作用路径：`/api/v1/internal/**`
+### 管理员鉴权（管理员接口 + 内部爬虫接口）
+- 请求头：`Authorization: Bearer <token>`
+- 角色要求：`role=1`（系统管理员）
+- 作用路径：
+  - `/api/v1/admin/**`
+  - `/api/v1/internal/crawler/**`
 
 ## 主要接口
 ### 公开接口
@@ -106,6 +107,17 @@ mvn spring-boot:run
 ### 内部接口
 - `POST /api/v1/internal/crawler/sync`
 
+### 管理员接口（节选）
+- `GET /api/v1/admin/jobs/pending-audit`
+- `POST /api/v1/admin/jobs/audit`
+- `POST /api/v1/admin/jobs/import-excel`
+- `GET /api/v1/admin/crawler/sync-logs`
+- `GET /api/v1/admin/crawler/error-items`
+- `GET /api/v1/admin/users`
+- `PUT /api/v1/admin/users/{id}/status`
+- `GET /api/v1/admin/moderation/sensitive-words`
+- `GET /api/v1/admin/configs`
+
 ## 响应示例
 ```json
 {
@@ -117,6 +129,7 @@ mvn spring-boot:run
 
 ## 相关文档
 - 接口文档：`OfferNow平台 API 接口文档.md`
+- 版本更新：`VERSION_UPDATE_2026-02-28.md`
 - 数据库脚本：`offernow.sql`
 
 ## 注意事项

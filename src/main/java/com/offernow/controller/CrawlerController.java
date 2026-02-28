@@ -20,7 +20,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/internal/crawler")
 @Tag(name = "内部模块-爬虫", description = "供内部爬虫程序调用的数据同步接口")
-@SecurityRequirement(name = "ApiKeyAuth")
+@SecurityRequirement(name = "Authorization")
 public class CrawlerController {
 
     @Autowired

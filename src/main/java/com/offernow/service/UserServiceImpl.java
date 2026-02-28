@@ -55,6 +55,8 @@ public class UserServiceImpl implements UserService {
         response.put("id", user.getId());
         response.put("nickname", user.getNickname());
         response.put("avatar", null);
+        response.put("role", user.getRole());
+        response.put("is_admin", Integer.valueOf(1).equals(user.getRole()));
 
         Map<String, Object> preferences = new HashMap<>();
         if (user.getPrefIndustry() != null && !user.getPrefIndustry().isEmpty()) {

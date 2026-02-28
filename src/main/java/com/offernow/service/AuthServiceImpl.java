@@ -39,6 +39,9 @@ public class AuthServiceImpl implements AuthService {
         if (user == null) {
             throw new RuntimeException("用户名或密码错误");
         }
+        if (Integer.valueOf(0).equals(user.getAccountStatus())) {
+            throw new RuntimeException("账号已被封禁，请联系管理员");
+        }
 
         // 2) 校验密码
         if (!passwordEncoder.matches(loginDto.getPassword(), user.getPasswordHash())) {
@@ -58,6 +61,8 @@ public class AuthServiceImpl implements AuthService {
         userInfo.put("id", user.getId());
         userInfo.put("nickname", user.getNickname());
         userInfo.put("avatar", null);
+        userInfo.put("role", user.getRole());
+        userInfo.put("is_admin", Integer.valueOf(1).equals(user.getRole()));
         userInfo.put("membership_level", user.getMembershipId());
         userInfo.put("is_vip", user.getMembershipId() > 1);
 
@@ -80,6 +85,8 @@ public class AuthServiceImpl implements AuthService {
         user.setUsername(registerDto.getUsername());
         user.setPasswordHash(passwordEncoder.encode(registerDto.getPassword()));
         user.setNickname("User_" + RandomUtil.randomString(6));
+        user.setRole(0);
+        user.setAccountStatus(1);
         user.setMembershipId(1);
         user.setCreatedAt(LocalDateTime.now());
         user.setLastLogin(LocalDateTime.now());
