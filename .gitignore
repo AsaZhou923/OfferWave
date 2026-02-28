@@ -1,0 +1,9 @@
+# Maven build output
+/target/
+
+# Generic compiled output directories
+/classes/
+
+# IDE
+/.idea/
+*.iml
