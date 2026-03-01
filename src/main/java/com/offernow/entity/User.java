@@ -23,6 +23,9 @@ public class User implements Serializable {
     /** 登录用户名 */
     private String username;
 
+    /** 独立邮箱（用于验证码登录和找回密码） */
+    private String email;
+
     /** BCrypt 密码哈希 */
     private String passwordHash;
 
