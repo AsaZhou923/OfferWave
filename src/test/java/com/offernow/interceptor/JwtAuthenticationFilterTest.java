@@ -38,6 +38,14 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void shouldResolveTokenFromTokenCookie() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(new Cookie("token", "cookie-token"));
+
+        assertEquals("cookie-token", resolveToken(request));
+    }
+
+    @Test
     void shouldReturnNullWhenAuthorizationBearerContainsNoToken() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer   ");
