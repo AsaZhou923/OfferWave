@@ -128,8 +128,7 @@ mvn spring-boot:run
 ```
 
 ## 相关文档
-- 接口文档：`OfferNow平台 API 接口文档.md`
-- 版本更新：`VERSION_UPDATE_2026-02-28.md`
+- 在线接口文档（运行后访问）：`/doc.html`
 - 数据库脚本：`offernow.sql`
 
 ## 注意事项

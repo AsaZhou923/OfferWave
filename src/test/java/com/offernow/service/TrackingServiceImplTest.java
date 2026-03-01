@@ -45,7 +45,7 @@ class TrackingServiceImplTest {
     private TrackingServiceImpl trackingService;
 
     @Test
-    void shouldThrowWhenJobNotExists() {
+    void shouldThrowWhenJobDoesNotExist() {
         UpdateJobStatusDto dto = new UpdateJobStatusDto();
         dto.setIsCollected(true);
 

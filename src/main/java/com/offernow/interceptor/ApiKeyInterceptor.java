@@ -9,8 +9,10 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 /**
- * 内部接口 API Key 拦截器。
- * 仅用于 /api/v1/internal/** 路径的访问控制。
+ * 内部接口 API Key 拦截器（历史兼容组件）。
+ *
+ * 当前默认鉴权策略已切换为管理员 JWT，该拦截器暂未在 WebMvcConfig 中注册。
+ * 若后续需要恢复 API Key 方案，可在 WebMvcConfig 中按需启用。
  */
 @Component
 public class ApiKeyInterceptor implements HandlerInterceptor {
