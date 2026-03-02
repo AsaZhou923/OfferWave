@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 公开职位查询控制器。
+ * Public job query controller.
  */
 @RestController
 @RequestMapping("/api/v1/jobs")
@@ -29,12 +29,13 @@ public class JobController {
     private JobService jobService;
 
     @GetMapping
-    @Operation(summary = "获取职位列表", description = "支持关键词、城市、类型、薪资和排序筛选")
+    @Operation(summary = "获取职位列表", description = "支持关键词、城市、行业、类型、薪资和排序筛选")
     public R<Page<Job>> searchJobs(
             @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
             @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size,
-            @Parameter(description = "关键词") @RequestParam(required = false) String keyword,
-            @Parameter(description = "城市") @RequestParam(required = false) String city,
+            @Parameter(description = "关键词（公司/岗位）") @RequestParam(required = false) String keyword,
+            @Parameter(description = "城市（模糊匹配）") @RequestParam(required = false) String city,
+            @Parameter(description = "行业（模糊匹配）") @RequestParam(required = false) String industry,
             @Parameter(description = "招聘类型") @RequestParam(required = false) String recruit_type,
             @Parameter(description = "最低薪资") @RequestParam(required = false) Integer salary_min,
             @Parameter(description = "学历要求") @RequestParam(required = false) String education,
@@ -42,7 +43,7 @@ public class JobController {
             @RequestParam(required = false, defaultValue = "newest") String sort
     ) {
         Page<Job> pageInfo = new Page<>(page, size);
-        Page<Job> resultPage = jobService.searchJobs(pageInfo, keyword, city, recruit_type, salary_min, education, sort);
+        Page<Job> resultPage = jobService.searchJobs(pageInfo, keyword, city, industry, recruit_type, salary_min, education, sort);
         return R.success(resultPage);
     }
 

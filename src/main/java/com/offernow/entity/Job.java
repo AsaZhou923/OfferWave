@@ -29,6 +29,10 @@ public class Job implements Serializable {
     /** 所属行业 */
     private String companyBusiness;
 
+    /** 行业（列表接口兼容字段，值同 companyBusiness） */
+    @TableField(exist = false)
+    private String industry;
+
     /** 职位名称 */
     private String jobTitle;
 

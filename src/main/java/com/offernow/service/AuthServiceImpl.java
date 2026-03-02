@@ -32,6 +32,8 @@ public class AuthServiceImpl implements AuthService {
     private static final Duration SEND_COOLDOWN = Duration.ofMinutes(1);
     private static final Duration DAILY_LIMIT_TTL = Duration.ofDays(1);
     private static final long DAILY_LIMIT = 10L;
+    private static final int TRIAL_MEMBERSHIP_ID = 2;
+    private static final int TRIAL_DAYS = 7;
 
     @Autowired
     private UserMapper userMapper;
@@ -47,6 +49,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Autowired
     private JavaMailSender mailSender;
+
+    @Autowired
+    private MembershipAccessService membershipAccessService;
 
     @Value("${offernow.mail.from:asazhou@qq.com}")
     private String mailFrom;
@@ -75,20 +80,15 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public void register(RegisterDto registerDto) {
-        if (userMapper.selectByUsername(registerDto.getUsername()) != null) {
-            throw new RuntimeException("用户名已存在");
+        String email = normalizeEmail(registerDto.getEmail());
+        verifyEmailCode("register", email, registerDto.getCode());
+        if (userMapper.selectByEmail(email) != null) {
+            throw new RuntimeException("该邮箱已注册");
         }
 
-        User user = new User();
-        user.setUsername(registerDto.getUsername());
-        user.setPasswordHash(passwordEncoder.encode(registerDto.getPassword()));
-        user.setNickname("User_" + RandomUtil.randomString(6));
-        user.setRole(0);
-        user.setAccountStatus(1);
-        user.setMembershipId(1);
-        user.setCreatedAt(LocalDateTime.now());
-        user.setLastLogin(LocalDateTime.now());
+        User user = buildNewEmailUser(email, registerDto.getPassword().trim());
         userMapper.insert(user);
+        stringRedisTemplate.delete(codeKey("register", email));
     }
 
     @Override
@@ -97,6 +97,12 @@ public class AuthServiceImpl implements AuthService {
         String type = dto.getType();
         String ip = normalizeIp(clientIp);
 
+        if ("register".equals(type) && userMapper.selectByEmail(email) != null) {
+            throw new RuntimeException("该邮箱已注册");
+        }
+        if ("login".equals(type) && userMapper.selectByEmail(email) == null) {
+            throw new RuntimeException("该邮箱尚未注册");
+        }
         if ("reset_pwd".equals(type) && userMapper.selectByEmail(email) == null) {
             throw new RuntimeException("该邮箱尚未注册");
         }
@@ -113,17 +119,9 @@ public class AuthServiceImpl implements AuthService {
         verifyEmailCode("login", email, dto.getCode());
 
         User user = userMapper.selectByEmail(email);
-        boolean isNewUser = false;
         if (user == null) {
-            String rawPassword = dto.getPassword();
-            if (!StringUtils.hasText(rawPassword) || rawPassword.trim().length() < 6) {
-                throw new RuntimeException("首次邮箱登录请设置至少6位密码");
-            }
-            user = buildNewEmailUser(email, rawPassword.trim());
-            userMapper.insert(user);
-            isNewUser = true;
+            throw new RuntimeException("该邮箱尚未注册");
         }
-
         if (Integer.valueOf(0).equals(user.getAccountStatus())) {
             throw new RuntimeException("账号已被封禁，请联系管理员");
         }
@@ -131,7 +129,7 @@ public class AuthServiceImpl implements AuthService {
         user.setLastLogin(LocalDateTime.now());
         userMapper.updateById(user);
         stringRedisTemplate.delete(codeKey("login", email));
-        return buildLoginResponse(user, isNewUser);
+        return buildLoginResponse(user, false);
     }
 
     @Override
@@ -180,7 +178,7 @@ public class AuthServiceImpl implements AuthService {
             throw new IllegalStateException("同一邮箱24小时内发送次数已达上限");
         }
         if (ipCount != null && ipCount > DAILY_LIMIT) {
-            throw new IllegalStateException("同一IP 24小时内发送次数已达上限");
+            throw new IllegalStateException("同一IP24小时内发送次数已达上限");
         }
     }
 
@@ -192,7 +190,8 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private void sendCodeEmail(String email, String type, String code) {
-        String sceneText = "login".equals(type) ? "登录" : "重置密码";
+        String sceneText = "register".equals(type) ? "注册"
+                : ("login".equals(type) ? "登录" : "重置密码");
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);
         message.setTo(email);
@@ -209,7 +208,8 @@ public class AuthServiceImpl implements AuthService {
         user.setNickname("User_" + RandomUtil.randomString(6));
         user.setRole(0);
         user.setAccountStatus(1);
-        user.setMembershipId(1);
+        user.setMembershipId(TRIAL_MEMBERSHIP_ID);
+        user.setMembershipExpireAt(LocalDateTime.now().plusDays(TRIAL_DAYS));
         user.setCreatedAt(LocalDateTime.now());
         user.setLastLogin(LocalDateTime.now());
         return user;
@@ -231,6 +231,9 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private String codeKey(String type, String email) {
+        if ("register".equals(type)) {
+            return "register_code:" + email;
+        }
         return ("login".equals(type) ? "login_code:" : "reset_pwd_code:") + email;
     }
 
@@ -243,17 +246,18 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private Map<String, Object> buildLoginResponse(User user, boolean isNewUser) {
+        User effectiveUser = membershipAccessService.ensureMembershipActive(user);
         String token = jwtUtil.generateToken(user.getId().toString());
         Map<String, Object> responseData = new HashMap<>();
         Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put("id", user.getId());
-        userInfo.put("nickname", user.getNickname());
+        userInfo.put("id", effectiveUser.getId());
+        userInfo.put("nickname", effectiveUser.getNickname());
         userInfo.put("avatar", null);
-        userInfo.put("role", user.getRole());
-        userInfo.put("is_admin", Integer.valueOf(1).equals(user.getRole()));
-        userInfo.put("membership_level", user.getMembershipId());
-        userInfo.put("is_vip", user.getMembershipId() > 1);
-        userInfo.put("email", user.getEmail());
+        userInfo.put("role", effectiveUser.getRole());
+        userInfo.put("is_admin", Integer.valueOf(1).equals(effectiveUser.getRole()));
+        userInfo.put("membership_level", effectiveUser.getMembershipId());
+        userInfo.put("is_vip", membershipAccessService.isVip(effectiveUser));
+        userInfo.put("email", effectiveUser.getEmail());
 
         responseData.put("token", token);
         responseData.put("user", userInfo);
@@ -261,4 +265,3 @@ public class AuthServiceImpl implements AuthService {
         return responseData;
     }
 }
-

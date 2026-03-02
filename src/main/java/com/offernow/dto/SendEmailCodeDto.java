@@ -17,7 +17,6 @@ public class SendEmailCodeDto implements Serializable {
     private String email;
 
     @NotBlank(message = "验证码类型不能为空")
-    @Pattern(regexp = "login|reset_pwd", message = "验证码类型仅支持 login 或 reset_pwd")
+    @Pattern(regexp = "register|login|reset_pwd", message = "验证码类型仅支持 register、login 或 reset_pwd")
     private String type;
 }
-

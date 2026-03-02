@@ -102,3 +102,23 @@
 - `users.email` 增加唯一索引：`uk_email`。
 - 新增迁移脚本：`src/main/resources/db/migration/V20260301__add_user_email.sql`
 
+---
+
+## 2026-03-02 增量更新（注册与登录规则收敛）
+### 1. 注册规则调整
+- 废弃“用户名+密码”注册流程。
+- 注册改为强制 `邮箱 + 邮箱验证码 + 密码`。
+- 注册成功后邮箱即账户标识（内部自动生成唯一 username）。
+- 新注册用户继续发放 7 天试用会员（VIP）。
+
+### 2. 登录规则确认
+- 支持“邮箱 + 密码”登录（`/api/v1/auth/login`，邮箱填写在 `username` 字段）。
+- 支持“邮箱 + 验证码”登录（`/api/v1/auth/login/email`）。
+- 取消“邮箱验证码登录自动注册”；未注册邮箱会直接返回失败。
+
+### 3. 验证码类型调整
+- `send-email-code` 新增 `register` 类型。
+- 当前支持三种类型：`register` / `login` / `reset_pwd`。
+
+### 4. 初始化 SQL 补齐
+- `offernow.sql` 的 `users` 表补充 `membership_expire_at` 字段，保证试用会员到期逻辑在全量初始化场景可用。

@@ -41,6 +41,9 @@ class TrackingServiceImplTest {
     @Mock
     private ContentModerationService contentModerationService;
 
+    @Mock
+    private MembershipAccessService membershipAccessService;
+
     @InjectMocks
     private TrackingServiceImpl trackingService;
 
@@ -75,6 +78,7 @@ class TrackingServiceImplTest {
         user.setId(1L);
         user.setMembershipId(1);
         when(userMapper.selectById(1L)).thenReturn(user);
+        when(membershipAccessService.ensureMembershipActive(user)).thenReturn(user);
 
         Membership membership = new Membership();
         membership.setId(1);

@@ -9,45 +9,45 @@ import com.offernow.dto.UsernamePasswordLoginDto;
 import java.util.Map;
 
 /**
- * 认证服务接口。
+ * Authentication service interface.
  */
 public interface AuthService {
 
     /**
-     * 用户名密码登录。
+     * Username/email + password login.
      *
-     * @param loginDto 登录参数
-     * @return 包含 token 与用户信息的结果
+     * @param loginDto login parameters
+     * @return token and user profile
      */
     Map<String, Object> login(UsernamePasswordLoginDto loginDto);
 
     /**
-     * 用户注册。
+     * Register with email + password + register code.
      *
-     * @param registerDto 注册参数
+     * @param registerDto registration parameters
      */
     void register(RegisterDto registerDto);
 
     /**
-     * 发送邮箱验证码。
+     * Send email code for register/login/reset.
      *
-     * @param dto 业务参数（邮箱 + 类型）
-     * @param clientIp 客户端 IP
+     * @param dto business parameters
+     * @param clientIp client IP
      */
     void sendEmailCode(SendEmailCodeDto dto, String clientIp);
 
     /**
-     * 邮箱验证码登录（支持验证码即注册）。
+     * Login by email code (registered users only).
      *
-     * @param dto 登录参数
-     * @return 包含 token 与用户信息
+     * @param dto login parameters
+     * @return token and user profile
      */
     Map<String, Object> loginByEmailCode(EmailCodeLoginDto dto);
 
     /**
-     * 重置密码。
+     * Reset password by email code.
      *
-     * @param dto 邮箱 + 验证码 + 新密码
+     * @param dto reset parameters
      */
     void resetPassword(ResetPasswordDto dto);
 }

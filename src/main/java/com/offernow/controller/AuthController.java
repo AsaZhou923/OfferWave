@@ -25,7 +25,7 @@ public class AuthController {
     private AuthService authService;
 
     @PostMapping("/login")
-    @Operation(summary = "账号密码登录", description = "用户通过用户名和密码获取 JWT Token")
+    @Operation(summary = "账号密码登录", description = "用户通过用户名或邮箱和密码获取 JWT Token")
     public R<Map<String, Object>> login(@Validated @RequestBody UsernamePasswordLoginDto loginDto) {
         try {
             return R.success(authService.login(loginDto));
@@ -35,7 +35,7 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    @Operation(summary = "用户注册", description = "用户通过用户名和密码注册")
+    @Operation(summary = "用户注册", description = "通过邮箱 + 密码 + 邮箱验证码注册")
     public R<String> register(@Validated @RequestBody RegisterDto registerDto) {
         try {
             authService.register(registerDto);
@@ -46,7 +46,7 @@ public class AuthController {
     }
 
     @PostMapping("/send-email-code")
-    @Operation(summary = "发送邮箱验证码", description = "支持 login / reset_pwd 两类验证码发送")
+    @Operation(summary = "发送邮箱验证码", description = "支持 register / login / reset_pwd 三类验证码发送")
     public R<String> sendEmailCode(@Validated @RequestBody SendEmailCodeDto dto, HttpServletRequest request) {
         try {
             authService.sendEmailCode(dto, resolveClientIp(request));
@@ -59,7 +59,7 @@ public class AuthController {
     }
 
     @PostMapping("/login/email")
-    @Operation(summary = "邮箱验证码登录", description = "邮箱 + 验证码登录，未注册邮箱自动创建账号")
+    @Operation(summary = "邮箱验证码登录", description = "邮箱 + 验证码登录，仅支持已注册邮箱")
     public R<Map<String, Object>> loginByEmailCode(@Validated @RequestBody EmailCodeLoginDto dto) {
         try {
             return R.success(authService.loginByEmailCode(dto));
@@ -91,4 +91,3 @@ public class AuthController {
         return request.getRemoteAddr();
     }
 }
-

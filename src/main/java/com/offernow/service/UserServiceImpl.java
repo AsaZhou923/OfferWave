@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -38,12 +39,16 @@ public class UserServiceImpl implements UserService {
     @Autowired
     private UserJobStatusMapper userJobStatusMapper;
 
+    @Autowired
+    private MembershipAccessService membershipAccessService;
+
     @Override
     public Map<String, Object> getUserInfo(Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw new RuntimeException("用户不存在");
         }
+        user = membershipAccessService.ensureMembershipActive(user);
 
         Membership membership = membershipMapper.selectById(user.getMembershipId());
         if (membership == null) {
@@ -72,7 +77,9 @@ public class UserServiceImpl implements UserService {
         Map<String, Object> membershipInfo = new HashMap<>();
         membershipInfo.put("id", membership.getId());
         membershipInfo.put("level_name", membership.getLevelName());
-        membershipInfo.put("expire_date", null);
+        membershipInfo.put("expire_date", user.getMembershipExpireAt() == null
+            ? null
+            : user.getMembershipExpireAt().toLocalDate().format(DateTimeFormatter.ISO_LOCAL_DATE));
         if (membership.getPrivileges() != null) {
             JSONObject privilegesJson = JSONUtil.parseObj(membership.getPrivileges());
             membershipInfo.put("privileges", privilegesJson);
@@ -127,6 +134,11 @@ public class UserServiceImpl implements UserService {
         }
 
         user.setMembershipId(targetLevelId);
+        if (targetMembership.getDurationDays() != null && targetMembership.getDurationDays() > 0) {
+            user.setMembershipExpireAt(LocalDateTime.now().plusDays(targetMembership.getDurationDays()));
+        } else {
+            user.setMembershipExpireAt(null);
+        }
         userMapper.updateById(user);
 
         Map<String, Object> response = new HashMap<>();

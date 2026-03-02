@@ -43,6 +43,9 @@ public class User implements Serializable {
     /** 会员等级 ID */
     private Integer membershipId;
 
+    /** 会员到期时间（null 表示永久） */
+    private LocalDateTime membershipExpireAt;
+
     /** 偏好行业 */
     private String prefIndustry;
 

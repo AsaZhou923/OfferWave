@@ -272,6 +272,9 @@ public class AdminServiceImpl implements AdminService {
         patch.setId(userId);
         if (membershipId != null) {
             patch.setMembershipId(membershipId);
+            if (membershipId <= 1) {
+                patch.setMembershipExpireAt(null);
+            }
         }
         patch.setCustomTrackLimit(customTrackLimit);
         return userMapper.updateById(patch) > 0;

@@ -93,6 +93,8 @@ mvn spring-boot:run
 ### 公开接口
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
+- `POST /api/v1/auth/login/email`
+- `POST /api/v1/auth/send-email-code`
 - `GET /api/v1/jobs`
 - `GET /api/v1/jobs/{id}`
 
@@ -130,6 +132,15 @@ mvn spring-boot:run
 ## 相关文档
 - 在线接口文档（运行后访问）：`/doc.html`
 - 数据库脚本：`offernow.sql`
+
+## 认证规则（最新）
+- 注册必须使用 `邮箱 + 邮箱验证码 + 密码`（`POST /api/v1/auth/register`）
+- 注册成功后，邮箱即账户标识（系统会自动生成内部 `username`）
+- 登录支持两种方式：
+  - 邮箱 + 密码：`POST /api/v1/auth/login`（将邮箱填入 `username` 字段）
+  - 邮箱 + 验证码：`POST /api/v1/auth/login/email`
+- 邮箱验证码发送类型支持：`register` / `login` / `reset_pwd`
+- 新注册用户自动获得 7 天试用会员（VIP），到期后按到期逻辑回落
 
 ## 注意事项
 - 当前 `application.yml` 含示例/开发配置，部署前请替换为真实安全配置。

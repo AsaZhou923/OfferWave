@@ -47,6 +47,9 @@ public class TrackingServiceImpl implements TrackingService {
     @Autowired
     private ContentModerationService contentModerationService;
 
+    @Autowired
+    private MembershipAccessService membershipAccessService;
+
     @Override
     public void updateJobStatus(Long userId, Long jobId, UpdateJobStatusDto dto) {
         Job job = jobMapper.selectById(jobId);
@@ -140,6 +143,7 @@ public class TrackingServiceImpl implements TrackingService {
         if (user == null) {
             throw new PrivilegeException("用户不存在，无法校验追踪权限");
         }
+        user = membershipAccessService.ensureMembershipActive(user);
 
         Membership membership = membershipMapper.selectById(user.getMembershipId());
         if (membership == null) {
