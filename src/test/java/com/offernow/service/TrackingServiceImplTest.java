@@ -1,5 +1,6 @@
 package com.offernow.service;
 
+import com.offernow.common.NotFoundException;
 import com.offernow.common.PrivilegeException;
 import com.offernow.dto.UpdateJobStatusDto;
 import com.offernow.entity.Job;
@@ -54,7 +55,7 @@ class TrackingServiceImplTest {
 
         when(jobMapper.selectById(100L)).thenReturn(null);
 
-        assertThrows(RuntimeException.class, () -> trackingService.updateJobStatus(1L, 100L, dto));
+        assertThrows(NotFoundException.class, () -> trackingService.updateJobStatus(1L, 100L, dto));
         verify(userJobStatusMapper, never()).insert(any(UserJobStatus.class));
     }
 
