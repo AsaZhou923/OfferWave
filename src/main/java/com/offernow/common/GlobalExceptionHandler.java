@@ -27,6 +27,15 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理资源不存在异常。
+     */
+    @ExceptionHandler(NotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public R<String> handleNotFoundException(NotFoundException ex) {
+        return R.error(404, ex.getMessage());
+    }
+
+    /**
      * 处理兜底异常。
      */
     @ExceptionHandler(Exception.class)

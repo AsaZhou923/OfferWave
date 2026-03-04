@@ -4,6 +4,7 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.offernow.common.NotFoundException;
 import com.offernow.common.PrivilegeException;
 import com.offernow.dto.UpdateJobStatusDto;
 import com.offernow.entity.Job;
@@ -54,7 +55,7 @@ public class TrackingServiceImpl implements TrackingService {
     public void updateJobStatus(Long userId, Long jobId, UpdateJobStatusDto dto) {
         Job job = jobMapper.selectById(jobId);
         if (job == null) {
-            throw new RuntimeException("职位不存在");
+            throw new NotFoundException("职位不存在");
         }
 
         LambdaQueryWrapper<UserJobStatus> queryWrapper = new LambdaQueryWrapper<>();
