@@ -1,4 +1,4 @@
-package com.offernow.controller;
+﻿package com.offernow.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.offernow.common.R;
@@ -16,7 +16,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
@@ -26,7 +33,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/user")
 @Tag(name = "用户个人中心", description = "管理用户个人信息、偏好、会员状态和职位追踪")
-@SecurityRequirement(name = "Authorization") // 标记所有接口需要认证
+@SecurityRequirement(name = "Authorization")
 public class UserController {
 
     @Autowired
@@ -35,11 +42,6 @@ public class UserController {
     @Autowired
     private TrackingService trackingService;
 
-    /**
-     * 从 Spring Security 上下文中获取当前登录的用户信息
-     * 
-     * @return 如果用户已登录，返回 User 对象；否则返回 null
-     */
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.isAuthenticated()
@@ -49,9 +51,6 @@ public class UserController {
         return null;
     }
 
-    /**
-     * 统一处理未登录返回。
-     */
     private R<Object> handleUnauthenticatedUser() {
         return R.error(401, "用户未登录或认证信息无效");
     }
@@ -60,18 +59,21 @@ public class UserController {
     @Operation(summary = "获取个人信息", description = "返回当前登录用户的个人信息、偏好和会员信息")
     public R<?> getMyInfo() {
         User currentUser = getCurrentUser();
-        if (currentUser == null)
+        if (currentUser == null) {
             return handleUnauthenticatedUser();
+        }
         Map<String, Object> userInfo = userService.getUserInfo(currentUser.getId());
         return R.success(userInfo);
     }
 
     @PutMapping("/preferences")
     @Operation(summary = "更新求职偏好", description = "更新用户求职偏好设置")
-    public R<?> updateMyPreferences(@RequestBody UserPreferenceDto preferenceDto) {
+    public R<?> updateMyPreferences(
+            @Parameter(description = "求职偏好参数") @RequestBody UserPreferenceDto preferenceDto) {
         User currentUser = getCurrentUser();
-        if (currentUser == null)
+        if (currentUser == null) {
             return handleUnauthenticatedUser();
+        }
         boolean success = userService.updatePreferences(currentUser.getId(), preferenceDto);
         if (success) {
             return R.success("偏好设置已更新");
@@ -82,10 +84,12 @@ public class UserController {
 
     @PostMapping("/membership/upgrade")
     @Operation(summary = "模拟升级会员", description = "开发测试接口：将当前用户升级到目标会员等级")
-    public R<?> upgradeMyMembership(@RequestBody UpgradeMembershipDto upgradeDto) {
+    public R<?> upgradeMyMembership(
+            @Parameter(description = "升级会员参数") @RequestBody UpgradeMembershipDto upgradeDto) {
         User currentUser = getCurrentUser();
-        if (currentUser == null)
+        if (currentUser == null) {
             return handleUnauthenticatedUser();
+        }
         if (upgradeDto == null || upgradeDto.getTargetLevelId() == null) {
             return R.error(400, "目标等级ID不能为空");
         }
@@ -95,23 +99,27 @@ public class UserController {
 
     @PostMapping("/jobs/{job_id}/status")
     @Operation(summary = "更新职位状态", description = "更新职位收藏/投递状态")
-    public R<?> updateJobStatus(@Parameter(description = "职位ID") @PathVariable("job_id") Long jobId,
-            @RequestBody UpdateJobStatusDto statusDto) {
+    public R<?> updateJobStatus(
+            @Parameter(description = "职位ID") @PathVariable("job_id") Long jobId,
+            @Parameter(description = "职位状态参数") @RequestBody UpdateJobStatusDto statusDto) {
         User currentUser = getCurrentUser();
-        if (currentUser == null)
-            return (R<?>) handleUnauthenticatedUser();
+        if (currentUser == null) {
+            return handleUnauthenticatedUser();
+        }
         trackingService.updateJobStatus(currentUser.getId(), jobId, statusDto);
         return R.success("状态已更新");
     }
 
     @GetMapping("/my-jobs")
     @Operation(summary = "获取我的职位列表", description = "获取用户“收藏夹”或“投递进度表”的数据")
-    public R<?> getMyJobs(@Parameter(description = "'collected' (仅收藏) 或 'delivered' (已投递)") @RequestParam String type,
+    public R<?> getMyJobs(
+            @Parameter(description = "列表类型：collected=仅收藏，delivered=已投递") @RequestParam String type,
             @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
             @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size) {
         User currentUser = getCurrentUser();
-        if (currentUser == null)
+        if (currentUser == null) {
             return handleUnauthenticatedUser();
+        }
 
         Page<Job> pageInfo = new Page<>(page, size);
         Page<Job> resultPage = trackingService.getMyJobs(currentUser.getId(), type, pageInfo);

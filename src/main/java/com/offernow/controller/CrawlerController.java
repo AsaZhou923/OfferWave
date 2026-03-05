@@ -1,9 +1,10 @@
-package com.offernow.controller;
+﻿package com.offernow.controller;
 
 import com.offernow.common.R;
 import com.offernow.dto.CrawlerSyncDto;
 import com.offernow.service.CrawlerService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +29,8 @@ public class CrawlerController {
 
     @PostMapping("/sync")
     @Operation(summary = "批量同步招聘数据", description = "接收爬虫清洗后的结构化职位数据，执行去重与更新")
-    public R<Map<String, Integer>> syncData(@RequestBody CrawlerSyncDto syncDto) {
+    public R<Map<String, Integer>> syncData(
+            @Parameter(description = "爬虫同步请求参数") @RequestBody CrawlerSyncDto syncDto) {
         if (syncDto == null || syncDto.getItems() == null || syncDto.getItems().isEmpty()) {
             return R.error(400, "items 列表不能为空");
         }

@@ -1,4 +1,4 @@
-package com.offernow.service;
+﻿package com.offernow.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
@@ -19,7 +19,10 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Job query service implementation.
@@ -113,6 +116,9 @@ public class JobServiceImpl implements JobService {
         resultPage.getRecords().forEach(job -> {
             job.setIndustry(job.getCompanyBusiness());
             job.setIsUrgent(false);
+            job.setIsCollected(false);
+            job.setDeliveryStatus(0);
+            job.setDeliveryStatusStr(DELIVERY_STATUS_MAP.get(0));
             if (StringUtils.isNotBlank(job.getDeadline())) {
                 try {
                     LocalDate deadlineDate = LocalDate.parse(job.getDeadline());
@@ -125,6 +131,29 @@ public class JobServiceImpl implements JobService {
                 }
             }
         });
+
+        if (currentUser != null && !resultPage.getRecords().isEmpty()) {
+            List<Long> jobIds = resultPage.getRecords().stream()
+                    .map(Job::getId)
+                    .collect(Collectors.toList());
+
+            LambdaQueryWrapper<UserJobStatus> statusWrapper = new LambdaQueryWrapper<>();
+            statusWrapper.eq(UserJobStatus::getUserId, currentUser.getId())
+                    .in(UserJobStatus::getJobId, jobIds);
+
+            Map<Long, UserJobStatus> statusByJobId = userJobStatusMapper.selectList(statusWrapper).stream()
+                    .collect(Collectors.toMap(UserJobStatus::getJobId, Function.identity(), (a, b) -> b));
+
+            resultPage.getRecords().forEach(job -> {
+                UserJobStatus status = statusByJobId.get(job.getId());
+                if (status != null) {
+                    job.setIsCollected(Boolean.TRUE.equals(status.getIsCollected()));
+                    Integer deliveryStatus = status.getDeliveryStatus() == null ? 0 : status.getDeliveryStatus();
+                    job.setDeliveryStatus(deliveryStatus);
+                    job.setDeliveryStatusStr(DELIVERY_STATUS_MAP.getOrDefault(deliveryStatus, "未知状态"));
+                }
+            });
+        }
 
         return resultPage;
     }
@@ -141,6 +170,11 @@ public class JobServiceImpl implements JobService {
 
         User currentUser = getCurrentUser();
         if (currentUser != null) {
+            JobDetailDto.MyStatus myStatus = new JobDetailDto.MyStatus();
+            myStatus.setCollected(false);
+            myStatus.setDeliveryStatus(0);
+            myStatus.setDeliveryStatusStr(DELIVERY_STATUS_MAP.get(0));
+
             Long userId = currentUser.getId();
             LambdaQueryWrapper<UserJobStatus> statusWrapper = new LambdaQueryWrapper<>();
             statusWrapper.eq(UserJobStatus::getUserId, userId)
@@ -148,16 +182,16 @@ public class JobServiceImpl implements JobService {
             UserJobStatus status = userJobStatusMapper.selectOne(statusWrapper);
 
             if (status != null) {
-                JobDetailDto.MyStatus myStatus = new JobDetailDto.MyStatus();
                 myStatus.setCollected(status.getIsCollected());
                 myStatus.setDeliveryStatus(status.getDeliveryStatus());
                 myStatus.setDeliveryStatusStr(
                         DELIVERY_STATUS_MAP.getOrDefault(status.getDeliveryStatus(), "未知状态"));
                 myStatus.setUserNote(status.getUserNote());
-                jobDetailDto.setMyStatus(myStatus);
             }
+            jobDetailDto.setMyStatus(myStatus);
         }
 
         return jobDetailDto;
     }
 }
+

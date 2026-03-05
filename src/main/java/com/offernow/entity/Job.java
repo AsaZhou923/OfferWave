@@ -1,9 +1,10 @@
-package com.offernow.entity;
+﻿package com.offernow.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -14,82 +15,95 @@ import java.time.LocalDateTime;
  */
 @TableName(value = "jobs")
 @Data
+@Schema(description = "职位信息")
 public class Job implements Serializable {
 
-    /** 主键 ID */
     @TableId(type = IdType.AUTO)
+    @Schema(description = "职位 ID")
     private Long id;
 
-    /** 公司名称 */
+    @Schema(description = "公司名称")
     private String companyName;
 
-    /** 公司类型 */
+    @Schema(description = "公司类型")
     private String companyType;
 
-    /** 所属行业 */
+    @Schema(description = "所属行业")
     private String companyBusiness;
 
-    /** 行业（列表接口兼容字段，值同 companyBusiness） */
     @TableField(exist = false)
+    @Schema(description = "行业（兼容字段，值同 companyBusiness）")
     private String industry;
 
-    /** 职位名称 */
+    @Schema(description = "岗位名称")
     private String jobTitle;
 
-    /** 工作城市 */
+    @Schema(description = "工作城市")
     private String city;
 
-    /** 招聘类型 */
+    @Schema(description = "招聘类型（春招/秋招/实习）")
     private String recruitType;
 
-    /** 招聘对象 */
+    @Schema(description = "招聘对象")
     private String targetAudience;
 
-    /** 职位公告 */
+    @Schema(description = "职位公告/描述")
     private String announcement;
 
-    /** 薪资范围文本 */
+    @Schema(description = "薪资范围文本")
     private String salaryRange;
 
-    /** 最低薪资 */
+    @Schema(description = "最低薪资（数值）")
     private Integer salaryMin;
 
-    /** 最高薪资 */
+    @Schema(description = "最高薪资（数值）")
     private Integer salaryMax;
 
-    /** 学历要求 */
+    @Schema(description = "学历要求")
     private String education;
 
-    /** 投递链接 */
+    @Schema(description = "投递链接")
     private String applyLink;
 
-    /** 笔试信息 */
+    @Schema(description = "笔试信息")
     private String testInfo;
 
-    /** 招聘进度 */
+    @Schema(description = "招聘流程阶段")
     private String processStage;
 
-    /** 截止日期 */
+    @Schema(description = "截止日期（YYYY-MM-DD）")
     private String deadline;
 
-    /** 去重哈希 */
+    @Schema(description = "去重哈希")
     private String uniqueHash;
 
-    /** 数据来源 */
+    @Schema(description = "数据来源")
     private String sourceOrigin;
 
-    /** 审核状态（0:待审,1:上线,2:拒绝） */
+    @Schema(description = "审核状态（0:待审, 1:上线, 2:驳回）")
     private Integer auditStatus;
 
-    /** 创建时间 */
+    @Schema(description = "创建时间")
     private LocalDateTime createdAt;
 
-    /** 更新时间 */
+    @Schema(description = "更新时间")
     private LocalDateTime updatedAt;
 
-    /** 是否临近截止（非持久化字段） */
     @TableField(exist = false)
+    @Schema(description = "是否临近截止（非持久化字段）")
     private Boolean isUrgent;
+
+    @TableField(exist = false)
+    @Schema(description = "当前用户是否已收藏该职位（未登录时默认 false）")
+    private Boolean isCollected;
+
+    @TableField(exist = false)
+    @Schema(description = "当前用户投递状态码（0:未投递, 1:已投递, 2:笔试中, 3:面试中, 4:已录用, 5:流程结束；未登录时默认 0）")
+    private Integer deliveryStatus;
+
+    @TableField(exist = false)
+    @Schema(description = "当前用户投递状态文案（未登录时默认“未投递”）")
+    private String deliveryStatusStr;
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;

@@ -1,4 +1,4 @@
-package com.offernow.controller;
+﻿package com.offernow.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.offernow.common.R;
@@ -20,6 +20,7 @@ import com.offernow.entity.User;
 import com.offernow.service.AdminService;
 import com.offernow.service.ContentModerationService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -60,14 +61,15 @@ public class AdminController {
 
     @GetMapping("/jobs/pending-audit")
     @Operation(summary = "待办审核列表")
-    public R<Page<Job>> pendingAuditJobs(@RequestParam(defaultValue = "1") int page,
-                                         @RequestParam(defaultValue = "20") int size) {
+    public R<Page<Job>> pendingAuditJobs(
+            @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
+            @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size) {
         return R.success(adminService.listPendingAuditJobs(new Page<>(page, size)));
     }
 
     @PostMapping("/jobs/audit")
     @Operation(summary = "批量审核职位")
-    public R<String> auditJobs(@Valid @RequestBody JobAuditBatchDto dto) {
+    public R<String> auditJobs(@Parameter(description = "批量审核参数") @Valid @RequestBody JobAuditBatchDto dto) {
         if (dto.getAuditStatus() == null || (dto.getAuditStatus() != 1 && dto.getAuditStatus() != 2)) {
             return R.error(400, "auditStatus 仅支持 1(通过) 或 2(驳回)");
         }
@@ -78,37 +80,40 @@ public class AdminController {
 
     @DeleteMapping("/jobs")
     @Operation(summary = "批量删除职位")
-    public R<String> deleteJobs(@RequestBody List<Long> jobIds) {
+    public R<String> deleteJobs(@Parameter(description = "待删除职位ID列表") @RequestBody List<Long> jobIds) {
         return adminService.batchDeleteJobs(jobIds) ? R.success("删除成功") : R.error(400, "删除失败");
     }
 
     @GetMapping("/jobs")
     @Operation(summary = "职位信息库（全量）")
-    public R<Page<Job>> listAllJobs(@RequestParam(defaultValue = "1") int page,
-                                    @RequestParam(defaultValue = "20") int size,
-                                    @RequestParam(required = false) String keyword,
-                                    @RequestParam(required = false) String companyName,
-                                    @RequestParam(required = false) Integer auditStatus) {
+    public R<Page<Job>> listAllJobs(
+            @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
+            @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "关键词（公司/岗位）") @RequestParam(required = false) String keyword,
+            @Parameter(description = "公司名称（精确或模糊）") @RequestParam(required = false) String companyName,
+            @Parameter(description = "审核状态：0待审/1上线/2驳回") @RequestParam(required = false) Integer auditStatus) {
         return R.success(adminService.listAllJobs(new Page<>(page, size), keyword, companyName, auditStatus));
     }
 
     @PostMapping("/jobs")
     @Operation(summary = "单条录入职位")
-    public R<Job> createJob(@Valid @RequestBody AdminJobUpsertDto dto) {
+    public R<Job> createJob(@Parameter(description = "职位录入参数") @Valid @RequestBody AdminJobUpsertDto dto) {
         dto.setId(null);
         return R.success(adminService.saveOrUpdateJob(dto));
     }
 
     @PostMapping("/jobs/batch")
     @Operation(summary = "批量录入职位（JSON）")
-    public R<Map<String, Integer>> createJobs(@RequestBody List<AdminJobUpsertDto> jobs) {
+    public R<Map<String, Integer>> createJobs(
+            @Parameter(description = "批量职位录入参数") @RequestBody List<AdminJobUpsertDto> jobs) {
         int inserted = adminService.batchCreateJobs(jobs);
         return R.success(Map.of("inserted_count", inserted));
     }
 
     @PostMapping("/jobs/import-excel")
     @Operation(summary = "Excel 批量导入职位")
-    public R<Map<String, Integer>> importJobsByExcel(@RequestParam("file") MultipartFile file) {
+    public R<Map<String, Integer>> importJobsByExcel(
+            @Parameter(description = "Excel 文件（.xlsx/.xls）") @RequestParam("file") MultipartFile file) {
         if (file == null || file.isEmpty()) {
             return R.error(400, "文件不能为空");
         }
@@ -148,14 +153,17 @@ public class AdminController {
 
     @PutMapping("/jobs/{id}")
     @Operation(summary = "编辑职位")
-    public R<Job> updateJob(@PathVariable Long id, @Valid @RequestBody AdminJobUpsertDto dto) {
+    public R<Job> updateJob(
+            @Parameter(description = "职位ID") @PathVariable Long id,
+            @Parameter(description = "职位更新参数") @Valid @RequestBody AdminJobUpsertDto dto) {
         dto.setId(id);
         return R.success(adminService.saveOrUpdateJob(dto));
     }
 
     @PostMapping("/jobs/company-stage")
     @Operation(summary = "批量更新公司招聘进度")
-    public R<Map<String, Integer>> updateCompanyStage(@Valid @RequestBody BatchCompanyStageUpdateDto dto) {
+    public R<Map<String, Integer>> updateCompanyStage(
+            @Parameter(description = "公司阶段更新参数") @Valid @RequestBody BatchCompanyStageUpdateDto dto) {
         int updated = adminService.batchUpdateCompanyProcessStage(dto.getCompanyName(), dto.getProcessStage());
         return R.success(Map.of("updated_count", updated));
     }
@@ -169,36 +177,43 @@ public class AdminController {
 
     @GetMapping("/crawler/sync-logs")
     @Operation(summary = "同步日志看板")
-    public R<Page<CrawlerSyncLog>> syncLogs(@RequestParam(defaultValue = "1") int page,
-                                            @RequestParam(defaultValue = "20") int size) {
+    public R<Page<CrawlerSyncLog>> syncLogs(
+            @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
+            @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size) {
         return R.success(adminService.listCrawlerSyncLogs(new Page<>(page, size)));
     }
 
     @GetMapping("/crawler/error-items")
     @Operation(summary = "异常拦截列表")
-    public R<Page<CrawlerSyncError>> syncErrors(@RequestParam(defaultValue = "1") int page,
-                                                @RequestParam(defaultValue = "20") int size) {
+    public R<Page<CrawlerSyncError>> syncErrors(
+            @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
+            @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size) {
         return R.success(adminService.listCrawlerSyncErrors(new Page<>(page, size)));
     }
 
     @GetMapping("/users")
     @Operation(summary = "用户列表")
-    public R<Page<User>> listUsers(@RequestParam(defaultValue = "1") int page,
-                                   @RequestParam(defaultValue = "20") int size,
-                                   @RequestParam(required = false) String keyword,
-                                   @RequestParam(required = false) Integer accountStatus) {
+    public R<Page<User>> listUsers(
+            @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
+            @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "关键词（用户名/邮箱）") @RequestParam(required = false) String keyword,
+            @Parameter(description = "账号状态：1正常/0封禁") @RequestParam(required = false) Integer accountStatus) {
         return R.success(adminService.listUsers(new Page<>(page, size), keyword, accountStatus));
     }
 
     @PutMapping("/users/{id}/status")
     @Operation(summary = "用户封禁/解封")
-    public R<String> updateUserStatus(@PathVariable Long id, @Valid @RequestBody UserStatusUpdateDto dto) {
+    public R<String> updateUserStatus(
+            @Parameter(description = "用户ID") @PathVariable Long id,
+            @Parameter(description = "用户状态更新参数") @Valid @RequestBody UserStatusUpdateDto dto) {
         return adminService.updateUserStatus(id, dto.getAccountStatus()) ? R.success("更新成功") : R.error(400, "更新失败");
     }
 
     @PutMapping("/users/{id}/benefits")
     @Operation(summary = "权益手工发放")
-    public R<String> adjustBenefits(@PathVariable Long id, @RequestBody UserBenefitAdjustDto dto) {
+    public R<String> adjustBenefits(
+            @Parameter(description = "用户ID") @PathVariable Long id,
+            @Parameter(description = "用户权益调整参数") @RequestBody UserBenefitAdjustDto dto) {
         return adminService.adjustUserBenefits(id, dto.getMembershipId(), dto.getCustomTrackLimit())
                 ? R.success("更新成功")
                 : R.error(400, "更新失败");
@@ -206,20 +221,24 @@ public class AdminController {
 
     @GetMapping("/moderation/sensitive-words")
     @Operation(summary = "敏感词列表")
-    public R<Page<SensitiveWord>> listSensitiveWords(@RequestParam(defaultValue = "1") int page,
-                                                     @RequestParam(defaultValue = "20") int size) {
+    public R<Page<SensitiveWord>> listSensitiveWords(
+            @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
+            @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size) {
         return R.success(contentModerationService.listSensitiveWords(new Page<>(page, size)));
     }
 
     @PostMapping("/moderation/sensitive-words")
     @Operation(summary = "新增敏感词")
-    public R<SensitiveWord> addSensitiveWord(@Valid @RequestBody SensitiveWordUpsertDto dto) {
+    public R<SensitiveWord> addSensitiveWord(
+            @Parameter(description = "敏感词参数") @Valid @RequestBody SensitiveWordUpsertDto dto) {
         return R.success(contentModerationService.addSensitiveWord(dto.getWord(), dto.getEnabled()));
     }
 
     @PutMapping("/moderation/sensitive-words/{id}/status")
     @Operation(summary = "修改敏感词状态")
-    public R<String> updateSensitiveWordStatus(@PathVariable Long id, @RequestBody SensitiveWordUpsertDto dto) {
+    public R<String> updateSensitiveWordStatus(
+            @Parameter(description = "敏感词ID") @PathVariable Long id,
+            @Parameter(description = "敏感词状态参数") @RequestBody SensitiveWordUpsertDto dto) {
         return contentModerationService.updateSensitiveWordStatus(id, dto.getEnabled())
                 ? R.success("更新成功")
                 : R.error(400, "更新失败");
@@ -227,14 +246,15 @@ public class AdminController {
 
     @DeleteMapping("/moderation/sensitive-words/{id}")
     @Operation(summary = "删除敏感词")
-    public R<String> deleteSensitiveWord(@PathVariable Long id) {
+    public R<String> deleteSensitiveWord(@Parameter(description = "敏感词ID") @PathVariable Long id) {
         return contentModerationService.deleteSensitiveWord(id) ? R.success("删除成功") : R.error(400, "删除失败");
     }
 
     @GetMapping("/moderation/audit-logs")
     @Operation(summary = "内容审核日志")
-    public R<Page<ContentAuditLog>> listAuditLogs(@RequestParam(defaultValue = "1") int page,
-                                                  @RequestParam(defaultValue = "20") int size) {
+    public R<Page<ContentAuditLog>> listAuditLogs(
+            @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
+            @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size) {
         return R.success(contentModerationService.listAuditLogs(new Page<>(page, size)));
     }
 
@@ -246,22 +266,26 @@ public class AdminController {
 
     @PutMapping("/memberships/{id}")
     @Operation(summary = "更新会员等级配置")
-    public R<String> updateMembership(@PathVariable Integer id, @RequestBody Membership membership) {
+    public R<String> updateMembership(
+            @Parameter(description = "会员等级ID") @PathVariable Integer id,
+            @Parameter(description = "会员配置参数") @RequestBody Membership membership) {
         membership.setId(id);
         return adminService.updateMembership(membership) ? R.success("更新成功") : R.error(400, "更新失败");
     }
 
     @GetMapping("/configs")
     @Operation(summary = "系统配置列表")
-    public R<Page<SystemConfig>> listConfigs(@RequestParam(defaultValue = "1") int page,
-                                             @RequestParam(defaultValue = "20") int size,
-                                             @RequestParam(required = false) String configKey) {
+    public R<Page<SystemConfig>> listConfigs(
+            @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
+            @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "配置键（可选过滤）") @RequestParam(required = false) String configKey) {
         return R.success(adminService.listSystemConfigs(new Page<>(page, size), configKey));
     }
 
     @PostMapping("/configs")
     @Operation(summary = "新增/更新系统配置")
-    public R<String> upsertConfig(@Valid @RequestBody SystemConfigUpsertDto dto) {
+    public R<String> upsertConfig(
+            @Parameter(description = "系统配置参数") @Valid @RequestBody SystemConfigUpsertDto dto) {
         return adminService.upsertSystemConfig(dto.getConfigKey(), dto.getConfigValue(), dto.getDescription())
                 ? R.success("保存成功")
                 : R.error(400, "保存失败");
