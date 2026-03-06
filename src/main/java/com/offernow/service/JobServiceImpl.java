@@ -1,4 +1,4 @@
-﻿package com.offernow.service;
+package com.offernow.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;

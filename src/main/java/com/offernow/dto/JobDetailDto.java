@@ -1,4 +1,4 @@
-﻿package com.offernow.dto;
+package com.offernow.dto;
 
 import com.offernow.entity.Job;
 import io.swagger.v3.oas.annotations.media.Schema;

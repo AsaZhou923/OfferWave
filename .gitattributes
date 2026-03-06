@@ -1,6 +1,6 @@
 * text=auto
 
-*.java text eol=lf
+*.java text eol=lf working-tree-encoding=UTF-8
 *.xml text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf

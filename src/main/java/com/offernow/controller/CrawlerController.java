@@ -1,4 +1,4 @@
-﻿package com.offernow.controller;
+package com.offernow.controller;
 
 import com.offernow.common.R;
 import com.offernow.dto.CrawlerSyncDto;

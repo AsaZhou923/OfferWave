@@ -1,4 +1,4 @@
-﻿package com.offernow.controller;
+package com.offernow.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.offernow.common.R;

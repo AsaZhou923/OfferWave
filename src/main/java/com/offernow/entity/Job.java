@@ -1,4 +1,4 @@
-﻿package com.offernow.entity;
+package com.offernow.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
