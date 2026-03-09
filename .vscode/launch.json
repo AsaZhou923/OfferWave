@@ -1,0 +1,29 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Current File",
+            "request": "launch",
+            "mainClass": "${file}"
+        },
+        {
+            "type": "java",
+            "name": "OfferNowApplication",
+            "request": "launch",
+            "mainClass": "com.offernow.OfferNowApplication",
+            "projectName": "offernow-backend",
+            "env": {
+                "DB_URL": "jdbc:mysql://34.146.93.206:3306/offer_now?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai",
+                "DB_USERNAME": "offer",
+                "DB_PASSWORD": "offert123",
+                "JWT_SECRET": "your-jwt-secret-key-that-is-long-enough-to-be-secure",
+                "CRAWLER_API_KEY": "your-jwt-secret-key",
+                "MAIL_PASSWORD": "yhqmkpoytoxgecih"
+            }
+        }
+    ]
+}

@@ -121,6 +121,79 @@ create table memberships
 create index idx_level_name
     on memberships (level_name);
 
+create table material_categories
+(
+    id          bigint auto_increment
+        primary key,
+    name        varchar(100)                       not null comment '资料分类名称',
+    slug        varchar(100)                       not null comment '资料分类唯一标识',
+    description varchar(255)                       null comment '分类说明',
+    sort_order  int      default 0                 not null comment '排序值，越小越靠前',
+    status      tinyint  default 1                 not null comment '状态：0-停用，1-启用',
+    created_at  datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updated_at  datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    constraint uk_material_category_slug
+        unique (slug)
+)
+    comment '资料包分类表' collate = utf8mb4_unicode_ci;
+
+create table material_packages
+(
+    id              bigint auto_increment
+        primary key,
+    category_id     bigint                             not null comment '所属分类ID',
+    title           varchar(150)                       not null comment '资料包标题',
+    slug            varchar(150)                       not null comment '资料包唯一标识',
+    subtitle        varchar(255)                       null comment '资料包副标题',
+    icon_url        varchar(255)                       null comment '卡片图标',
+    cover_image_url varchar(255)                       null comment '封面图',
+    excerpt         varchar(500)                       null comment '摘要',
+    content         mediumtext                         not null comment '正文内容，建议存 HTML 或 Markdown',
+    preview_images  json                               null comment '正文图片列表',
+    file_catalog    json                               null comment '文件目录列表',
+    download_tip    varchar(255)                       null comment '下载提示语',
+    access_type     tinyint  default 1                 not null comment '访问类型：0-公开下载，1-会员下载',
+    status          tinyint  default 1                 not null comment '状态：0-草稿，1-已发布，2-已下线',
+    view_count      bigint   default 0                 not null comment '浏览次数',
+    download_count  bigint   default 0                 not null comment '下载次数',
+    sort_order      int      default 0                 not null comment '排序值，越小越靠前',
+    published_at    datetime default CURRENT_TIMESTAMP not null comment '发布时间',
+    created_at      datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updated_at      datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    constraint uk_material_package_slug
+        unique (slug),
+    constraint fk_material_package_category
+        foreign key (category_id) references material_categories (id)
+)
+    comment '资料包主表' collate = utf8mb4_unicode_ci;
+
+create index idx_material_package_category_status
+    on material_packages (category_id, status, sort_order);
+
+create table material_downloads
+(
+    id              bigint auto_increment
+        primary key,
+    package_id      bigint                             not null comment '所属资料包ID',
+    title           varchar(150)                       not null comment '下载项标题',
+    download_url    varchar(1000)                      not null comment '下载地址',
+    extraction_code varchar(100)                       null comment '提取码',
+    file_type       varchar(50)                        null comment '文件类型',
+    file_size       varchar(50)                        null comment '文件大小',
+    description     varchar(255)                       null comment '下载项说明',
+    sort_order      int      default 0                 not null comment '排序值',
+    status          tinyint  default 1                 not null comment '状态：0-停用，1-启用',
+    created_at      datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updated_at      datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    constraint fk_material_download_package
+        foreign key (package_id) references material_packages (id)
+            on delete cascade
+)
+    comment '资料包下载资源表' collate = utf8mb4_unicode_ci;
+
+create index idx_material_download_package_status
+    on material_downloads (package_id, status, sort_order);
+
 create table sensitive_words
 (
     id         bigint auto_increment

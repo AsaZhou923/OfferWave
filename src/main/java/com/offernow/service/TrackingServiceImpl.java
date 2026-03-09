@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.offernow.common.NotFoundException;
 import com.offernow.common.PrivilegeException;
+import com.offernow.dto.MyJobDto;
 import com.offernow.dto.UpdateJobStatusDto;
 import com.offernow.entity.Job;
 import com.offernow.entity.Membership;
@@ -16,6 +17,7 @@ import com.offernow.mapper.MembershipMapper;
 import com.offernow.mapper.UserJobStatusMapper;
 import com.offernow.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -94,7 +96,7 @@ public class TrackingServiceImpl implements TrackingService {
     }
 
     @Override
-    public Page<Job> getMyJobs(Long userId, String type, Page<Job> page) {
+    public Page<MyJobDto> getMyJobs(Long userId, String type, Page<?> page) {
         LambdaQueryWrapper<UserJobStatus> statusWrapper = new LambdaQueryWrapper<>();
         statusWrapper.eq(UserJobStatus::getUserId, userId);
 
@@ -112,7 +114,10 @@ public class TrackingServiceImpl implements TrackingService {
         Page<UserJobStatus> statusPage = userJobStatusMapper.selectPage(statusQueryPage, statusWrapper);
         List<Long> jobIds = statusPage.getRecords().stream().map(UserJobStatus::getJobId).collect(Collectors.toList());
 
-        Page<Job> jobPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
+        Map<Long, UserJobStatus> statusMap = statusPage.getRecords().stream()
+                .collect(Collectors.toMap(UserJobStatus::getJobId, s -> s, (oldVal, newVal) -> oldVal));
+
+        Page<MyJobDto> jobPage = new Page<>(page.getCurrent(), page.getSize(), statusPage.getTotal());
         if (jobIds.isEmpty()) {
             return jobPage;
         }
@@ -120,9 +125,16 @@ public class TrackingServiceImpl implements TrackingService {
         // 批量查询职位并按状态分页结果原顺序回填
         List<Job> jobs = jobMapper.selectBatchIds(jobIds);
         Map<Long, Job> jobMap = jobs.stream().collect(Collectors.toMap(Job::getId, j -> j));
-        List<Job> sortedJobs = jobIds.stream()
+        List<MyJobDto> sortedJobs = jobIds.stream()
                 .map(jobMap::get)
                 .filter(Objects::nonNull)
+                .map(job -> {
+                    MyJobDto dto = new MyJobDto();
+                    BeanUtils.copyProperties(job, dto);
+                    UserJobStatus status = statusMap.get(job.getId());
+                    dto.setDeliveryStatus(status == null || status.getDeliveryStatus() == null ? 0 : status.getDeliveryStatus());
+                    return dto;
+                })
                 .collect(Collectors.toList());
 
         jobPage.setRecords(sortedJobs);

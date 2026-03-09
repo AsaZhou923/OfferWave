@@ -2,10 +2,10 @@ package com.offernow.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.offernow.common.R;
+import com.offernow.dto.MyJobDto;
 import com.offernow.dto.UpdateJobStatusDto;
 import com.offernow.dto.UserPreferenceDto;
 import com.offernow.dto.UpgradeMembershipDto;
-import com.offernow.entity.Job;
 import com.offernow.entity.User;
 import com.offernow.service.TrackingService;
 import com.offernow.service.UserService;
@@ -121,8 +121,8 @@ public class UserController {
             return handleUnauthenticatedUser();
         }
 
-        Page<Job> pageInfo = new Page<>(page, size);
-        Page<Job> resultPage = trackingService.getMyJobs(currentUser.getId(), type, pageInfo);
+        Page<MyJobDto> pageInfo = new Page<>(page, size);
+        Page<MyJobDto> resultPage = trackingService.getMyJobs(currentUser.getId(), type, pageInfo);
         return R.success(resultPage);
     }
 }

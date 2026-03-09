@@ -1,8 +1,8 @@
 package com.offernow.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.offernow.dto.MyJobDto;
 import com.offernow.dto.UpdateJobStatusDto;
-import com.offernow.entity.Job;
 
 /**
  * 职位追踪服务接口。
@@ -26,5 +26,5 @@ public interface TrackingService {
      * @param page 分页对象
      * @return 分页后的职位列表
      */
-    Page<Job> getMyJobs(Long userId, String type, Page<Job> page);
+    Page<MyJobDto> getMyJobs(Long userId, String type, Page<?> page);
 }
