@@ -193,5 +193,12 @@ public class JobServiceImpl implements JobService {
 
         return jobDetailDto;
     }
+
+    @Override
+    public long countPublicJobs() {
+        LambdaQueryWrapper<Job> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Job::getAuditStatus, 1);
+        return jobMapper.selectCount(wrapper);
+    }
 }
 

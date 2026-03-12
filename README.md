@@ -96,6 +96,7 @@ mvn spring-boot:run
 - `POST /api/v1/auth/login/email`
 - `POST /api/v1/auth/send-email-code`
 - `GET /api/v1/jobs`
+- `GET /api/v1/jobs/total`
 - `GET /api/v1/jobs/{id}`
 
 ### 需登录接口

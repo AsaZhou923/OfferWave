@@ -32,4 +32,11 @@ public interface JobService {
      * @return 职位详情 DTO；不存在或未上线时返回 null
      */
     JobDetailDto getJobDetail(Long jobId);
+
+    /**
+     * 获取当前公开职位总数（仅统计已审核上线数据）。
+     *
+     * @return 公开职位总数
+     */
+    long countPublicJobs();
 }

@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 /**
  * 公开职位查询控制器。
  */
@@ -46,6 +48,12 @@ public class JobController {
         Page<Job> pageInfo = new Page<>(page, size);
         Page<Job> resultPage = jobService.searchJobs(pageInfo, keyword, city, industry, recruit_type, salary_min, education, sort);
         return R.success(resultPage);
+    }
+
+    @GetMapping("/total")
+    @Operation(summary = "获取公开职位总数", description = "返回当前已审核上线的职位总数，游客可访问")
+    public R<Map<String, Long>> getPublicJobTotal() {
+        return R.success(Map.of("total_count", jobService.countPublicJobs()));
     }
 
     @GetMapping("/{id}")
