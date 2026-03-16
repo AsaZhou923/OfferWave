@@ -19,8 +19,13 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.Objects;
+import java.util.Queue;
+import java.util.LinkedList;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -40,6 +45,7 @@ public class JobServiceImpl implements JobService {
     private MembershipAccessService membershipAccessService;
 
     private static final int JOB_LIST_LIMIT = 30;
+    private static final int DIVERSIFIED_WINDOW_SIZE = 30;
 
     private static final Map<Integer, String> DELIVERY_STATUS_MAP = Map.of(
             0, "未投递",
@@ -96,10 +102,41 @@ public class JobServiceImpl implements JobService {
             wrapper.orderByDesc(Job::getUpdatedAt);
         }
 
-        Page<Job> resultPage = jobMapper.selectPage(page, wrapper);
+        long offset = page.offset();
+
+        Page<Job> resultPage;
+        if (offset < DIVERSIFIED_WINDOW_SIZE) {
+            int preloadSize = DIVERSIFIED_WINDOW_SIZE + (int) page.getSize();
+            Page<Job> preloadPage = new Page<>(1, preloadSize);
+            Page<Job> preloadResult = jobMapper.selectPage(preloadPage, wrapper);
+
+            List<Job> preloadRecords = preloadResult.getRecords();
+            int diversifiedSourceEnd = Math.min(DIVERSIFIED_WINDOW_SIZE, preloadRecords.size());
+            List<Job> diversifiedWindow = diversifyByCompany(preloadRecords.subList(0, diversifiedSourceEnd));
+
+            List<Job> mergedPageRecords = new ArrayList<>();
+            int diversifiedStart = (int) offset;
+            int diversifiedEnd = Math.min(diversifiedStart + (int) page.getSize(), diversifiedWindow.size());
+            if (diversifiedStart < diversifiedEnd) {
+                mergedPageRecords.addAll(diversifiedWindow.subList(diversifiedStart, diversifiedEnd));
+            }
+
+            int remainSize = (int) page.getSize() - mergedPageRecords.size();
+            if (remainSize > 0 && !isLimitedUser) {
+                int fallbackStart = DIVERSIFIED_WINDOW_SIZE;
+                int fallbackEnd = Math.min(fallbackStart + remainSize, preloadRecords.size());
+                if (fallbackStart < fallbackEnd) {
+                    mergedPageRecords.addAll(preloadRecords.subList(fallbackStart, fallbackEnd));
+                }
+            }
+
+            resultPage = new Page<>(page.getCurrent(), page.getSize(), preloadResult.getTotal());
+            resultPage.setRecords(mergedPageRecords);
+        } else {
+            resultPage = jobMapper.selectPage(page, wrapper);
+        }
 
         if (isLimitedUser) {
-            long offset = page.offset();
             resultPage.setTotal(Math.min(resultPage.getTotal(), JOB_LIST_LIMIT));
 
             if (offset >= JOB_LIST_LIMIT) {
@@ -158,6 +195,45 @@ public class JobServiceImpl implements JobService {
         return resultPage;
     }
 
+    /**
+     * 对窗口内岗位按公司做轮询重排，避免同一家公司连续占据首页。
+     */
+    private List<Job> diversifyByCompany(List<Job> jobs) {
+        if (jobs.size() <= 1) {
+            return jobs;
+        }
+
+        Map<String, Queue<Job>> jobsByCompany = new LinkedHashMap<>();
+        jobs.forEach(job -> {
+            String companyKey = normalizeCompanyName(job.getCompanyName());
+            jobsByCompany.computeIfAbsent(companyKey, ignored -> new LinkedList<>()).offer(job);
+        });
+
+        List<Job> diversifiedJobs = new ArrayList<>(jobs.size());
+        while (diversifiedJobs.size() < jobs.size()) {
+            boolean consumedInRound = false;
+            for (Queue<Job> companyJobs : jobsByCompany.values()) {
+                Job nextJob = companyJobs.poll();
+                if (nextJob != null) {
+                    diversifiedJobs.add(nextJob);
+                    consumedInRound = true;
+                }
+            }
+            if (!consumedInRound) {
+                break;
+            }
+        }
+
+        return diversifiedJobs;
+    }
+
+    private String normalizeCompanyName(String companyName) {
+        if (StringUtils.isBlank(companyName)) {
+            return "__UNKNOWN_COMPANY__";
+        }
+        return Objects.toString(companyName, "").trim().toLowerCase();
+    }
+
     @Override
     public JobDetailDto getJobDetail(Long jobId) {
         Job job = jobMapper.selectById(jobId);
@@ -201,4 +277,3 @@ public class JobServiceImpl implements JobService {
         return jobMapper.selectCount(wrapper);
     }
 }
-
