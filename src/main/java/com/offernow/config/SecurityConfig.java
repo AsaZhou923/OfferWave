@@ -34,6 +34,9 @@ public class SecurityConfig {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private StorageProperties storageProperties;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -59,6 +62,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/**",
                                 "/api/v1/material-categories/**",
                                 "/api/v1/material-packages/**",
+                                storageProperties.resolvePublicPattern(),
                                 "/doc.html",
                                 "/webjars/**",
                                 "/swagger-resources/**",

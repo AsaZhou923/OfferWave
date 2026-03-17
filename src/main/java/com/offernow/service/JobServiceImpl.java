@@ -18,14 +18,10 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.ArrayList;
-import java.util.Objects;
-import java.util.Queue;
-import java.util.LinkedList;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -45,7 +41,7 @@ public class JobServiceImpl implements JobService {
     private MembershipAccessService membershipAccessService;
 
     private static final int JOB_LIST_LIMIT = 30;
-    private static final int DIVERSIFIED_WINDOW_SIZE = 30;
+    private static final int ID_PRIORITY_WINDOW_SIZE = 30;
 
     private static final Map<Integer, String> DELIVERY_STATUS_MAP = Map.of(
             0, "未投递",
@@ -83,70 +79,20 @@ public class JobServiceImpl implements JobService {
         User currentUser = getCurrentUser();
         boolean isLimitedUser = shouldLimitJobList(currentUser);
 
-        LambdaQueryWrapper<Job> wrapper = new LambdaQueryWrapper<>();
-
-        wrapper.eq(Job::getAuditStatus, 1);
-        wrapper.and(StringUtils.isNotBlank(keyword),
-                w -> w.like(Job::getCompanyName, keyword).or().like(Job::getJobTitle, keyword));
-        wrapper.like(StringUtils.isNotBlank(city), Job::getCity, city);
-        wrapper.like(StringUtils.isNotBlank(industry), Job::getCompanyBusiness, industry);
-        wrapper.eq(StringUtils.isNotBlank(recruitType), Job::getRecruitType, recruitType);
-        wrapper.ge(salaryMin != null, Job::getSalaryMin, salaryMin);
-        wrapper.eq(StringUtils.isNotBlank(education), Job::getEducation, education);
-
-        if ("deadline".equals(sort)) {
-            wrapper.orderByAsc(Job::getDeadline);
-        } else if ("salary_desc".equals(sort)) {
-            wrapper.orderByDesc(Job::getSalaryMax);
-        } else {
-            wrapper.orderByDesc(Job::getUpdatedAt);
-        }
-
         long offset = page.offset();
+        long total = jobMapper.selectCount(buildBaseJobQuery(keyword, city, industry, recruitType, salaryMin, education));
+        List<Job> priorityWindowJobs = fetchPriorityWindowJobs(keyword, city, industry, recruitType, salaryMin, education);
+        List<Long> priorityWindowJobIds = priorityWindowJobs.stream().map(Job::getId).collect(Collectors.toList());
+        int priorityWindowSize = priorityWindowJobs.size();
 
         Page<Job> resultPage;
-        if (offset < DIVERSIFIED_WINDOW_SIZE) {
-            int preloadSize = DIVERSIFIED_WINDOW_SIZE + (int) page.getSize();
-            Page<Job> preloadPage = new Page<>(1, preloadSize);
-            Page<Job> preloadResult = jobMapper.selectPage(preloadPage, wrapper);
-
-            List<Job> preloadRecords = preloadResult.getRecords();
-            int diversifiedSourceEnd = Math.min(DIVERSIFIED_WINDOW_SIZE, preloadRecords.size());
-            List<Job> diversifiedWindow = diversifyByCompany(preloadRecords.subList(0, diversifiedSourceEnd));
-
-            List<Job> mergedPageRecords = new ArrayList<>();
-            int diversifiedStart = (int) offset;
-            int diversifiedEnd = Math.min(diversifiedStart + (int) page.getSize(), diversifiedWindow.size());
-            if (diversifiedStart < diversifiedEnd) {
-                mergedPageRecords.addAll(diversifiedWindow.subList(diversifiedStart, diversifiedEnd));
-            }
-
-            int remainSize = (int) page.getSize() - mergedPageRecords.size();
-            if (remainSize > 0 && !isLimitedUser) {
-                int fallbackStart = DIVERSIFIED_WINDOW_SIZE;
-                int fallbackEnd = Math.min(fallbackStart + remainSize, preloadRecords.size());
-                if (fallbackStart < fallbackEnd) {
-                    mergedPageRecords.addAll(preloadRecords.subList(fallbackStart, fallbackEnd));
-                }
-            }
-
-            resultPage = new Page<>(page.getCurrent(), page.getSize(), preloadResult.getTotal());
-            resultPage.setRecords(mergedPageRecords);
-        } else {
-            resultPage = jobMapper.selectPage(page, wrapper);
-        }
-
         if (isLimitedUser) {
-            resultPage.setTotal(Math.min(resultPage.getTotal(), JOB_LIST_LIMIT));
-
-            if (offset >= JOB_LIST_LIMIT) {
-                resultPage.setRecords(Collections.emptyList());
-            } else {
-                int remain = (int) (JOB_LIST_LIMIT - offset);
-                if (resultPage.getRecords().size() > remain) {
-                    resultPage.setRecords(resultPage.getRecords().subList(0, remain));
-                }
-            }
+            resultPage = new Page<>(page.getCurrent(), page.getSize(), Math.min(total, JOB_LIST_LIMIT));
+            resultPage.setRecords(slicePriorityWindow(priorityWindowJobs, offset, page.getSize()));
+        } else {
+            resultPage = new Page<>(page.getCurrent(), page.getSize(), total);
+            resultPage.setRecords(fetchJobsWithPriorityWindow(page, sort, keyword, city, industry,
+                    recruitType, salaryMin, education, priorityWindowJobs, priorityWindowJobIds, priorityWindowSize));
         }
 
         LocalDate today = LocalDate.now();
@@ -198,40 +144,83 @@ public class JobServiceImpl implements JobService {
     /**
      * 对窗口内岗位按公司做轮询重排，避免同一家公司连续占据首页。
      */
-    private List<Job> diversifyByCompany(List<Job> jobs) {
-        if (jobs.size() <= 1) {
-            return jobs;
-        }
-
-        Map<String, Queue<Job>> jobsByCompany = new LinkedHashMap<>();
-        jobs.forEach(job -> {
-            String companyKey = normalizeCompanyName(job.getCompanyName());
-            jobsByCompany.computeIfAbsent(companyKey, ignored -> new LinkedList<>()).offer(job);
-        });
-
-        List<Job> diversifiedJobs = new ArrayList<>(jobs.size());
-        while (diversifiedJobs.size() < jobs.size()) {
-            boolean consumedInRound = false;
-            for (Queue<Job> companyJobs : jobsByCompany.values()) {
-                Job nextJob = companyJobs.poll();
-                if (nextJob != null) {
-                    diversifiedJobs.add(nextJob);
-                    consumedInRound = true;
-                }
-            }
-            if (!consumedInRound) {
-                break;
-            }
-        }
-
-        return diversifiedJobs;
+    private LambdaQueryWrapper<Job> buildBaseJobQuery(String keyword, String city, String industry,
+                                                      String recruitType, Integer salaryMin, String education) {
+        LambdaQueryWrapper<Job> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Job::getAuditStatus, 1);
+        wrapper.and(StringUtils.isNotBlank(keyword),
+                w -> w.like(Job::getCompanyName, keyword).or().like(Job::getJobTitle, keyword));
+        wrapper.like(StringUtils.isNotBlank(city), Job::getCity, city);
+        wrapper.like(StringUtils.isNotBlank(industry), Job::getCompanyBusiness, industry);
+        wrapper.eq(StringUtils.isNotBlank(recruitType), Job::getRecruitType, recruitType);
+        wrapper.ge(salaryMin != null, Job::getSalaryMin, salaryMin);
+        wrapper.eq(StringUtils.isNotBlank(education), Job::getEducation, education);
+        return wrapper;
     }
 
-    private String normalizeCompanyName(String companyName) {
-        if (StringUtils.isBlank(companyName)) {
-            return "__UNKNOWN_COMPANY__";
+    private List<Job> fetchPriorityWindowJobs(String keyword, String city, String industry,
+                                              String recruitType, Integer salaryMin, String education) {
+        LambdaQueryWrapper<Job> wrapper = buildBaseJobQuery(keyword, city, industry, recruitType, salaryMin, education);
+        wrapper.orderByAsc(Job::getId);
+        wrapper.last("LIMIT " + ID_PRIORITY_WINDOW_SIZE);
+        return jobMapper.selectList(wrapper);
+    }
+
+    private List<Job> fetchJobsWithPriorityWindow(Page<Job> page, String sort, String keyword, String city,
+                                                  String industry, String recruitType, Integer salaryMin,
+                                                  String education, List<Job> priorityWindowJobs,
+                                                  List<Long> priorityWindowJobIds, int priorityWindowSize) {
+        long offset = page.offset();
+        List<Job> result = new ArrayList<>();
+
+        if (offset < priorityWindowSize) {
+            result.addAll(slicePriorityWindow(priorityWindowJobs, offset, page.getSize()));
         }
-        return Objects.toString(companyName, "").trim().toLowerCase();
+
+        int remain = (int) page.getSize() - result.size();
+        if (remain <= 0) {
+            return result;
+        }
+
+        long regularOffset = Math.max(0, offset - priorityWindowSize);
+        result.addAll(fetchRegularJobsExcludingPriorityWindow(regularOffset, remain, sort, keyword, city,
+                industry, recruitType, salaryMin, education, priorityWindowJobIds));
+        return result;
+    }
+
+    private List<Job> fetchRegularJobsExcludingPriorityWindow(long offset, int size, String sort, String keyword,
+                                                              String city, String industry, String recruitType,
+                                                              Integer salaryMin, String education,
+                                                              List<Long> excludedJobIds) {
+        if (size <= 0) {
+            return Collections.emptyList();
+        }
+
+        LambdaQueryWrapper<Job> wrapper = buildBaseJobQuery(keyword, city, industry, recruitType, salaryMin, education);
+        wrapper.notIn(!excludedJobIds.isEmpty(), Job::getId, excludedJobIds);
+        applyRegularSort(wrapper, sort);
+        wrapper.last("LIMIT " + offset + ", " + size);
+        return jobMapper.selectList(wrapper);
+    }
+
+    private void applyRegularSort(LambdaQueryWrapper<Job> wrapper, String sort) {
+        if ("deadline".equals(sort)) {
+            wrapper.orderByAsc(Job::getDeadline);
+        } else if ("salary_desc".equals(sort)) {
+            wrapper.orderByDesc(Job::getSalaryMax);
+        } else {
+            wrapper.orderByDesc(Job::getUpdatedAt);
+        }
+    }
+
+    private List<Job> slicePriorityWindow(List<Job> priorityWindowJobs, long offset, long size) {
+        if (offset >= priorityWindowJobs.size() || size <= 0) {
+            return Collections.emptyList();
+        }
+
+        int start = (int) offset;
+        int end = Math.min(start + (int) size, priorityWindowJobs.size());
+        return new ArrayList<>(priorityWindowJobs.subList(start, end));
     }
 
     @Override

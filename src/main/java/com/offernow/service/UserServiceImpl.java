@@ -58,6 +58,7 @@ public class UserServiceImpl implements UserService {
         // 1) 组装基础用户信息与偏好
         Map<String, Object> response = new HashMap<>();
         response.put("id", user.getId());
+        response.put("email", user.getEmail());
         response.put("nickname", user.getNickname());
         response.put("avatar", null);
         response.put("role", user.getRole());

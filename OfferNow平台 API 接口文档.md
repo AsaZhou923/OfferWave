@@ -1,8 +1,8 @@
 ﻿# OfferNow平台 API 接口文档
 
-**文档版本**：V1.1.1
+**文档版本**：V1.1.2
 
-**最后更新**：2026-03-12
+**最后更新**：2026-03-17
 
 **状态**：接口草案
 
@@ -195,6 +195,7 @@
   "message": "success",
   "data": {
     "id": 1001,
+    "email": "zhangsan@example.com",
     "nickname": "张三",
     "avatar": "[https://example.com/avatar.jpg](https://example.com/avatar.jpg)",
     "preferences": {
@@ -643,7 +644,8 @@ def generate_hash(company, title, city):
 ### 9.2 新增管理员模
 - 新增路由前缀：`/api/v1/admin/**`
 - 覆盖能力
-  - 招聘信息管理（待审列表、审核、职位全量管理、Excel 导入、批量进度更新、过期清理）
+  - 招聘信息管理（待审列表、审核、职位全量管理、Excel/CSV 导入、批量进度更新、过期清理）
+  - 导入接口：`POST /api/v1/admin/jobs/import-file`
   - 爬虫监控（同步日志、异常拦截列表）
   - 用户与权益管理（用户列表、封禁/解封、手工权益发放）
   - 内容审核（敏感词管理、审核日志）
@@ -771,8 +773,82 @@ def generate_hash(company, title, city):
 - 新增邮件配置（QQ SMTP）：
   - `spring.mail.host=smtp.qq.com`
   - `spring.mail.port=465`
-  - `spring.mail.username=asazhou@qq.com`
-  - `spring.mail.password=${MAIL_PASSWORD}`
+- `spring.mail.username=asazhou@qq.com`
+- `spring.mail.password=${MAIL_PASSWORD}`
+
+## 11. v1.1.2 更新说明（2026-03-17）
+
+### 11.1 管理员资料包模块新增图片上传接口
+
+- **URL**: `/admin/material-packages/images`
+- **Method**: `POST`
+- **Content-Type**: `multipart/form-data`
+- **描述**: 上传资料包封面图或正文预览图，后端将图片保存到服务器本地磁盘，并返回可直接写入 `coverImageUrl` / `previewImages` 的访问地址
+- **权限**: 需登录，且要求管理员角色（`Authorization: Bearer <token>`）
+- **表单字段**:
+  - `files`: 多文件上传字段，支持一次上传多张
+  - `file`: 单文件上传字段，兼容仅上传一张图的前端写法
+
+#### 请求示例
+
+```bash
+curl -X POST "https://api.offernow.com/api/v1/admin/material-packages/images" \
+  -H "Authorization: Bearer <admin_token>" \
+  -F "files=@cover.png" \
+  -F "files=@detail-1.jpg"
+```
+
+#### 成功响应 (HTTP 200)
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": [
+    {
+      "originalName": "cover.png",
+      "fileName": "3d5d6d7e8f194dbdb0d3f7d6134185ab.png",
+      "url": "/uploads/materials/images/2026/03/17/3d5d6d7e8f194dbdb0d3f7d6134185ab.png",
+      "contentType": "image/png",
+      "size": 182344
+    },
+    {
+      "originalName": "detail-1.jpg",
+      "fileName": "76d1e1e8a5ef4d34b2fd5cba7dc9a9ac.jpg",
+      "url": "/uploads/materials/images/2026/03/17/76d1e1e8a5ef4d34b2fd5cba7dc9a9ac.jpg",
+      "contentType": "image/jpeg",
+      "size": 265901
+    }
+  ]
+}
+```
+
+#### 失败响应
+
+- **400 Bad Request**
+  - `{"code": 400, "message": "请至少上传一张图片"}`
+  - `{"code": 400, "message": "仅支持 jpg、jpeg、png、webp、gif 格式图片"}`
+  - `{"code": 400, "message": "上传文件必须是图片"}`
+  - `{"code": 400, "message": "图片大小不能超过 10MB"}`
+- **401 Unauthorized**: 未登录或 Token 无效
+- **403 Forbidden**: 非管理员账号访问后台接口
+- **500 Internal Server Error**: 图片保存失败
+
+### 11.2 前端接入说明
+
+- 上传成功后，请将返回结果中的 `url` 直接写入资料包管理接口中的 `coverImageUrl` 或 `previewImages`
+- 资料包新增接口：`POST /api/v1/admin/material-packages`
+- 资料包编辑接口：`PUT /api/v1/admin/material-packages/{id}`
+
+### 11.3 本地存储与部署约定
+
+- 图片默认保存到 `${user.dir}/storage/materials/images/...`
+- 默认公开访问前缀为 `/uploads/**`
+- 部署到服务器时，建议通过环境变量覆盖以下配置：
+  - `OFFERNOW_STORAGE_ROOT`
+  - `OFFERNOW_STORAGE_PUBLIC_URL_PREFIX`
+  - `OFFERNOW_MATERIAL_IMAGE_MAX_SIZE`
+- 服务器需保证上传目录具有读写权限，并在重启或重新发布时保留该目录
 
 
 

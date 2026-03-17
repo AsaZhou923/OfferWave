@@ -28,10 +28,14 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 public class AdminServiceImpl implements AdminService {
@@ -109,17 +113,9 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     public Job saveOrUpdateJob(AdminJobUpsertDto dto) {
-        Job job = new Job();
-        BeanUtils.copyProperties(dto, job);
-        if (!StringUtils.hasText(job.getUniqueHash())
-                && StringUtils.hasText(job.getCompanyName())
-                && StringUtils.hasText(job.getJobTitle())
-                && StringUtils.hasText(job.getCity())) {
-            String raw = job.getCompanyName() + "_" + job.getJobTitle() + "_" + job.getCity();
-            job.setUniqueHash(DigestUtils.md5DigestAsHex(raw.getBytes(StandardCharsets.UTF_8)));
-        }
-        if (job.getAuditStatus() == null) {
-            job.setAuditStatus(1);
+        Job job = buildJobFromDto(dto);
+        if (job == null) {
+            return null;
         }
         if (job.getId() == null) {
             jobMapper.insert(job);
@@ -135,25 +131,60 @@ public class AdminServiceImpl implements AdminService {
         if (jobs == null || jobs.isEmpty()) {
             return 0;
         }
-        int inserted = 0;
+        Map<String, Job> distinctJobs = new LinkedHashMap<>();
         for (AdminJobUpsertDto dto : jobs) {
-            if (!StringUtils.hasText(dto.getCompanyName())
-                    || !StringUtils.hasText(dto.getJobTitle())
-                    || !StringUtils.hasText(dto.getCity())
-                    || !StringUtils.hasText(dto.getCompanyType())
-                    || !StringUtils.hasText(dto.getRecruitType())) {
+            Job job = buildJobFromDto(dto);
+            if (job == null) {
                 continue;
             }
-            Job job = new Job();
-            BeanUtils.copyProperties(dto, job);
-            String raw = job.getCompanyName() + "_" + job.getJobTitle() + "_" + job.getCity();
-            job.setUniqueHash(DigestUtils.md5DigestAsHex(raw.getBytes(StandardCharsets.UTF_8)));
-            if (job.getAuditStatus() == null) {
-                job.setAuditStatus(1);
+            distinctJobs.put(job.getUniqueHash(), job);
+        }
+        if (distinctJobs.isEmpty()) {
+            return 0;
+        }
+
+        LambdaQueryWrapper<Job> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(Job::getUniqueHash, distinctJobs.keySet());
+        Set<String> existingHashes = jobMapper.selectList(wrapper).stream()
+                .map(Job::getUniqueHash)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+
+        int inserted = 0;
+        for (Job job : distinctJobs.values()) {
+            if (existingHashes.contains(job.getUniqueHash())) {
+                continue;
             }
             inserted += jobMapper.insert(job);
         }
         return inserted;
+    }
+
+    private Job buildJobFromDto(AdminJobUpsertDto dto) {
+        if (dto == null
+                || !StringUtils.hasText(dto.getCompanyName())
+                || !StringUtils.hasText(dto.getJobTitle())
+                || !StringUtils.hasText(dto.getCity())
+                || !StringUtils.hasText(dto.getCompanyType())
+                || !StringUtils.hasText(dto.getRecruitType())) {
+            return null;
+        }
+
+        Job job = new Job();
+        BeanUtils.copyProperties(dto, job);
+        job.setUniqueHash(buildUniqueHash(job.getCompanyName(), job.getJobTitle(), job.getCity()));
+        if (job.getAuditStatus() == null) {
+            job.setAuditStatus(1);
+        }
+        if (!StringUtils.hasText(job.getSourceOrigin())) {
+            job.setSourceOrigin("人工导入");
+        }
+        return job;
+    }
+
+    private String buildUniqueHash(String companyName, String jobTitle, String city) {
+        String raw = companyName + "_" + jobTitle + "_" + city;
+        return DigestUtils.md5DigestAsHex(raw.getBytes(StandardCharsets.UTF_8));
     }
 
     @Override

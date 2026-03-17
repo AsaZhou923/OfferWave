@@ -1,6 +1,7 @@
 package com.offernow.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -75,6 +76,7 @@ public class Job implements Serializable {
     private String deadline;
 
     @Schema(description = "去重哈希")
+    @TableField(value = "unique_hash", insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private String uniqueHash;
 
     @Schema(description = "数据来源")

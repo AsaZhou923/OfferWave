@@ -113,7 +113,7 @@ mvn spring-boot:run
 ### 管理员接口（节选）
 - `GET /api/v1/admin/jobs/pending-audit`
 - `POST /api/v1/admin/jobs/audit`
-- `POST /api/v1/admin/jobs/import-excel`
+- `POST /api/v1/admin/jobs/import-file`
 - `GET /api/v1/admin/crawler/sync-logs`
 - `GET /api/v1/admin/crawler/error-items`
 - `GET /api/v1/admin/users`

@@ -19,16 +19,12 @@ import com.offernow.entity.SystemConfig;
 import com.offernow.entity.User;
 import com.offernow.service.AdminService;
 import com.offernow.service.ContentModerationService;
+import com.offernow.util.JobImportParser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.apache.poi.ss.usermodel.DataFormatter;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,8 +38,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -110,44 +104,21 @@ public class AdminController {
         return R.success(Map.of("inserted_count", inserted));
     }
 
-    @PostMapping("/jobs/import-excel")
-    @Operation(summary = "Excel 批量导入职位")
-    public R<Map<String, Integer>> importJobsByExcel(
-            @Parameter(description = "Excel 文件（.xlsx/.xls）") @RequestParam("file") MultipartFile file) {
+    @PostMapping("/jobs/import-file")
+    @Operation(summary = "Excel/CSV 批量导入职位")
+    public R<Map<String, Integer>> importJobs(
+            @Parameter(description = "Excel 或 CSV 文件（.xlsx/.xls/.csv）") @RequestParam("file") MultipartFile file) {
         if (file == null || file.isEmpty()) {
             return R.error(400, "文件不能为空");
         }
-        try (InputStream inputStream = file.getInputStream(); Workbook workbook = WorkbookFactory.create(inputStream)) {
-            Sheet sheet = workbook.getSheetAt(0);
-            List<AdminJobUpsertDto> jobs = new ArrayList<>();
-            DataFormatter formatter = new DataFormatter();
-            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
-                Row row = sheet.getRow(i);
-                if (row == null) {
-                    continue;
-                }
-                AdminJobUpsertDto dto = new AdminJobUpsertDto();
-                dto.setCompanyName(formatter.formatCellValue(row.getCell(0)));
-                dto.setCompanyType(formatter.formatCellValue(row.getCell(1)));
-                dto.setCompanyBusiness(formatter.formatCellValue(row.getCell(2)));
-                dto.setJobTitle(formatter.formatCellValue(row.getCell(3)));
-                dto.setCity(formatter.formatCellValue(row.getCell(4)));
-                dto.setRecruitType(formatter.formatCellValue(row.getCell(5)));
-                dto.setTargetAudience(formatter.formatCellValue(row.getCell(6)));
-                dto.setEducation(formatter.formatCellValue(row.getCell(7)));
-                dto.setSalaryRange(formatter.formatCellValue(row.getCell(8)));
-                dto.setApplyLink(formatter.formatCellValue(row.getCell(9)));
-                dto.setDeadline(formatter.formatCellValue(row.getCell(10)));
-                dto.setProcessStage(formatter.formatCellValue(row.getCell(11)));
-                dto.setTestInfo(formatter.formatCellValue(row.getCell(12)));
-                dto.setSourceOrigin("人工导入");
-                dto.setAuditStatus(1);
-                jobs.add(dto);
-            }
+        try {
+            List<AdminJobUpsertDto> jobs = JobImportParser.parse(file);
             int inserted = adminService.batchCreateJobs(jobs);
             return R.success(Map.of("received_count", jobs.size(), "inserted_count", inserted));
+        } catch (IllegalArgumentException ex) {
+            return R.error(400, ex.getMessage());
         } catch (IOException ex) {
-            return R.error(400, "Excel 解析失败: " + ex.getMessage());
+            return R.error(400, "文件解析失败: " + ex.getMessage());
         }
     }
 

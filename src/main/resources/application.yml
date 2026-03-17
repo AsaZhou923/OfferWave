@@ -2,22 +2,21 @@
 #                      OfferNow 应用配置
 # ===================================================================
 
-# 服务器配置
 server:
   port: 8080
 
-# Spring 应用配置
 spring:
   application:
     name: offernow-backend
-  # 数据库连接配置
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 50MB
   datasource:
-    # 建议通过环境变量注入，避免凭据出现在仓库中
     url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/offer_now?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
-  # Redis 配置
   data:
     redis:
       host: ${REDIS_HOST:127.0.0.1}
@@ -36,49 +35,40 @@ spring:
           ssl:
             enable: true
 
-# MyBatis Plus 配置
 mybatis-plus:
-  # 实体类包扫描路径
   type-aliases-package: com.offernow.entity
-  # Mapper XML 文件位置
   mapper-locations: classpath:/mapper/**/*.xml
   configuration:
-    # 开启驼峰命名转换
     map-underscore-to-camel-case: true
-    # 日志实现
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
-      # 全局逻辑删除配置
-      logic-delete-field: is_deleted # 假如你的表有逻辑删除字段
+      logic-delete-field: is_deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
 
-# Knife4j API 文档配置
 knife4j:
   enable: true
   setting:
     title: "OfferNow 平台 API 文档"
-    description: "提供职位信息、用户追踪、会员管理等核心功能的 RESTful API。"
+    description: "提供职位信息、用户追踪、会员管理等核心 RESTful API。"
     contact:
       name: "Xavier"
       email: "your-email@example.com"
     version: "v1.0.0"
 
-# ===================================================================
-#                        自定义业务配置
-# ===================================================================
 offernow:
-  # 微信登录配置
   wechat:
     appid: ${WECHAT_APPID:}
     secret: ${WECHAT_SECRET:}
-  # JWT 配置
   jwt:
     secret: ${JWT_SECRET:change-me-in-production}
-    expiration: ${JWT_EXPIRATION:86400000} # 24小时 (单位: 毫秒)
-  # 内部爬虫 API Key
+    expiration: ${JWT_EXPIRATION:86400000}
   crawler:
     api-key: ${CRAWLER_API_KEY:}
   mail:
     from: ${MAIL_FROM:asazhou@qq.com}
+  storage:
+    root-path: ${OFFERNOW_STORAGE_ROOT:${user.dir}/storage}
+    public-url-prefix: ${OFFERNOW_STORAGE_PUBLIC_URL_PREFIX:/uploads}
+    material-image-max-size: ${OFFERNOW_MATERIAL_IMAGE_MAX_SIZE:10485760}

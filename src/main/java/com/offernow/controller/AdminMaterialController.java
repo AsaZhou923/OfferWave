@@ -3,10 +3,12 @@ package com.offernow.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.offernow.common.R;
 import com.offernow.dto.MaterialCategoryUpsertDto;
+import com.offernow.dto.MaterialImageUploadDto;
 import com.offernow.dto.MaterialPackageCardDto;
 import com.offernow.dto.MaterialPackageDetailDto;
 import com.offernow.dto.MaterialPackageUpsertDto;
 import com.offernow.entity.MaterialCategory;
+import com.offernow.service.MaterialAssetStorageService;
 import com.offernow.service.MaterialPackageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -14,6 +16,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,7 +25,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @RestController
@@ -33,6 +39,9 @@ public class AdminMaterialController {
 
     @Autowired
     private MaterialPackageService materialPackageService;
+
+    @Autowired
+    private MaterialAssetStorageService materialAssetStorageService;
 
     @GetMapping("/material-categories")
     @Operation(summary = "获取资料分类列表")
@@ -84,5 +93,20 @@ public class AdminMaterialController {
             @Parameter(description = "资料包ID") @PathVariable Long id,
             @Valid @RequestBody MaterialPackageUpsertDto dto) {
         return R.success(materialPackageService.saveOrUpdatePackage(id, dto));
+    }
+
+    @PostMapping(value = "/material-packages/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "上传资料包图片")
+    public R<List<MaterialImageUploadDto>> uploadPackageImages(
+            @Parameter(description = "图片文件，支持一次上传多张") @RequestParam(value = "files", required = false) MultipartFile[] files,
+            @Parameter(description = "单张图片文件") @RequestParam(value = "file", required = false) MultipartFile file) {
+        List<MultipartFile> uploadFiles = new ArrayList<>();
+        if (files != null && files.length > 0) {
+            uploadFiles.addAll(Arrays.asList(files));
+        }
+        if (file != null) {
+            uploadFiles.add(file);
+        }
+        return R.success(materialAssetStorageService.uploadImages(uploadFiles));
     }
 }

@@ -7,3 +7,9 @@
 # IDE
 /.idea/
 *.iml
+
+# Local dependency cache
+/.m2/
+
+# Runtime file storage
+/storage/
