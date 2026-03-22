@@ -1,0 +1,270 @@
+package com.offerwave.service;
+
+import cn.hutool.core.util.RandomUtil;
+import com.offerwave.dto.EmailCodeLoginDto;
+import com.offerwave.dto.RegisterDto;
+import com.offerwave.dto.ResetPasswordDto;
+import com.offerwave.dto.SendEmailCodeDto;
+import com.offerwave.dto.UsernamePasswordLoginDto;
+import com.offerwave.entity.User;
+import com.offerwave.mapper.UserMapper;
+import com.offerwave.util.JwtUtil;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+@Service
+public class AuthServiceImpl implements AuthService {
+
+    private static final Duration CODE_TTL = Duration.ofMinutes(5);
+    private static final Duration SEND_COOLDOWN = Duration.ofMinutes(1);
+    private static final Duration DAILY_LIMIT_TTL = Duration.ofDays(1);
+    private static final long DAILY_LIMIT = 10L;
+    private static final int TRIAL_MEMBERSHIP_ID = 2;
+    private static final int TRIAL_DAYS = 7;
+
+    @Autowired
+    private UserMapper userMapper;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Autowired
+    private JavaMailSender mailSender;
+
+    @Autowired
+    private MembershipAccessService membershipAccessService;
+
+    @Value("${offerwave.mail.from:}")
+    private String mailFrom;
+
+    @Override
+    public Map<String, Object> login(UsernamePasswordLoginDto loginDto) {
+        String identifier = loginDto.getUsername() == null ? "" : loginDto.getUsername().trim();
+        User user = userMapper.selectByUsername(identifier);
+        if (user == null) {
+            user = userMapper.selectByEmail(identifier.toLowerCase());
+        }
+        if (user == null) {
+            throw new RuntimeException("用户名或密码错误");
+        }
+        if (Integer.valueOf(0).equals(user.getAccountStatus())) {
+            throw new RuntimeException("账号已被封禁，请联系管理员");
+        }
+        if (!passwordEncoder.matches(loginDto.getPassword(), user.getPasswordHash())) {
+            throw new RuntimeException("用户名或密码错误");
+        }
+
+        user.setLastLogin(LocalDateTime.now());
+        userMapper.updateById(user);
+        return buildLoginResponse(user, false);
+    }
+
+    @Override
+    public void register(RegisterDto registerDto) {
+        String email = normalizeEmail(registerDto.getEmail());
+        verifyEmailCode("register", email, registerDto.getCode());
+        if (userMapper.selectByEmail(email) != null) {
+            throw new RuntimeException("该邮箱已注册");
+        }
+
+        User user = buildNewEmailUser(email, registerDto.getPassword().trim());
+        userMapper.insert(user);
+        stringRedisTemplate.delete(codeKey("register", email));
+    }
+
+    @Override
+    public void sendEmailCode(SendEmailCodeDto dto, String clientIp) {
+        String email = normalizeEmail(dto.getEmail());
+        String type = dto.getType();
+        String ip = normalizeIp(clientIp);
+
+        if ("register".equals(type) && userMapper.selectByEmail(email) != null) {
+            throw new RuntimeException("该邮箱已注册");
+        }
+        if ("login".equals(type) && userMapper.selectByEmail(email) == null) {
+            throw new RuntimeException("该邮箱尚未注册");
+        }
+        if ("reset_pwd".equals(type) && userMapper.selectByEmail(email) == null) {
+            throw new RuntimeException("该邮箱尚未注册");
+        }
+
+        enforceSendRateLimit(email, type, ip);
+        String code = RandomUtil.randomNumbers(6);
+        stringRedisTemplate.opsForValue().set(codeKey(type, email), code, CODE_TTL);
+        sendCodeEmail(email, type, code);
+    }
+
+    @Override
+    public Map<String, Object> loginByEmailCode(EmailCodeLoginDto dto) {
+        String email = normalizeEmail(dto.getEmail());
+        verifyEmailCode("login", email, dto.getCode());
+
+        User user = userMapper.selectByEmail(email);
+        if (user == null) {
+            throw new RuntimeException("该邮箱尚未注册");
+        }
+        if (Integer.valueOf(0).equals(user.getAccountStatus())) {
+            throw new RuntimeException("账号已被封禁，请联系管理员");
+        }
+
+        user.setLastLogin(LocalDateTime.now());
+        userMapper.updateById(user);
+        stringRedisTemplate.delete(codeKey("login", email));
+        return buildLoginResponse(user, false);
+    }
+
+    @Override
+    public void resetPassword(ResetPasswordDto dto) {
+        String email = normalizeEmail(dto.getEmail());
+        verifyEmailCode("reset_pwd", email, dto.getCode());
+
+        User user = userMapper.selectByEmail(email);
+        if (user == null) {
+            throw new RuntimeException("该邮箱尚未注册");
+        }
+        if (Integer.valueOf(0).equals(user.getAccountStatus())) {
+            throw new RuntimeException("账号已被封禁，请联系管理员");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(dto.getNewPassword()));
+        userMapper.updateById(user);
+        stringRedisTemplate.delete(codeKey("reset_pwd", email));
+    }
+
+    private void enforceSendRateLimit(String email, String type, String ip) {
+        String cooldownEmailKey = "email_code:cooldown:email:" + type + ":" + email;
+        String cooldownIpKey = "email_code:cooldown:ip:" + type + ":" + ip;
+        String day = LocalDate.now().toString();
+        String emailDailyCountKey = "email_code:count:email:" + type + ":" + day + ":" + email;
+        String ipDailyCountKey = "email_code:count:ip:" + type + ":" + day + ":" + ip;
+
+        if (Boolean.FALSE.equals(stringRedisTemplate.opsForValue().setIfAbsent(cooldownEmailKey, "1", SEND_COOLDOWN))) {
+            throw new IllegalStateException("同一邮箱发送过于频繁，请1分钟后再试");
+        }
+        if (Boolean.FALSE.equals(stringRedisTemplate.opsForValue().setIfAbsent(cooldownIpKey, "1", SEND_COOLDOWN))) {
+            throw new IllegalStateException("同一IP发送过于频繁，请1分钟后再试");
+        }
+
+        Long emailCount = stringRedisTemplate.opsForValue().increment(emailDailyCountKey);
+        if (emailCount != null && emailCount == 1L) {
+            stringRedisTemplate.expire(emailDailyCountKey, DAILY_LIMIT_TTL);
+        }
+
+        Long ipCount = stringRedisTemplate.opsForValue().increment(ipDailyCountKey);
+        if (ipCount != null && ipCount == 1L) {
+            stringRedisTemplate.expire(ipDailyCountKey, DAILY_LIMIT_TTL);
+        }
+
+        if (emailCount != null && emailCount > DAILY_LIMIT) {
+            throw new IllegalStateException("同一邮箱24小时内发送次数已达上限");
+        }
+        if (ipCount != null && ipCount > DAILY_LIMIT) {
+            throw new IllegalStateException("同一IP24小时内发送次数已达上限");
+        }
+    }
+
+    private void verifyEmailCode(String type, String email, String code) {
+        String cachedCode = stringRedisTemplate.opsForValue().get(codeKey(type, email));
+        if (!StringUtils.hasText(cachedCode) || !cachedCode.equals(code)) {
+            throw new RuntimeException("验证码错误或已过期");
+        }
+    }
+
+    private void sendCodeEmail(String email, String type, String code) {
+        String sceneText = "register".equals(type) ? "注册"
+                : ("login".equals(type) ? "登录" : "重置密码");
+        if (!StringUtils.hasText(mailFrom)) {
+            throw new IllegalStateException("未配置发件邮箱，请设置 MAIL_FROM 或 MAIL_USERNAME");
+        }
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(mailFrom);
+        message.setTo(email);
+        message.setSubject("OfferWave 邮箱验证码");
+        message.setText("您正在进行" + sceneText + "操作，验证码为：" + code + "，5分钟内有效。");
+        mailSender.send(message);
+    }
+
+    private User buildNewEmailUser(String email, String rawPassword) {
+        User user = new User();
+        user.setEmail(email);
+        user.setUsername(generateUniqueUsername(email));
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setNickname("User_" + RandomUtil.randomString(6));
+        user.setRole(0);
+        user.setAccountStatus(1);
+        user.setMembershipId(TRIAL_MEMBERSHIP_ID);
+        user.setMembershipExpireAt(LocalDateTime.now().plusDays(TRIAL_DAYS));
+        user.setCreatedAt(LocalDateTime.now());
+        user.setLastLogin(LocalDateTime.now());
+        return user;
+    }
+
+    private String generateUniqueUsername(String email) {
+        String localPart = email.split("@")[0].replaceAll("[^a-zA-Z0-9_]", "");
+        if (!StringUtils.hasText(localPart)) {
+            localPart = "email_user";
+        }
+        localPart = localPart.length() > 16 ? localPart.substring(0, 16) : localPart;
+        for (int i = 0; i < 10; i++) {
+            String candidate = localPart + "_" + RandomUtil.randomString(6);
+            if (userMapper.selectByUsername(candidate) == null) {
+                return candidate;
+            }
+        }
+        return "user_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+
+    private String codeKey(String type, String email) {
+        if ("register".equals(type)) {
+            return "register_code:" + email;
+        }
+        return ("login".equals(type) ? "login_code:" : "reset_pwd_code:") + email;
+    }
+
+    private String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase();
+    }
+
+    private String normalizeIp(String ip) {
+        return StringUtils.hasText(ip) ? ip.trim() : "unknown";
+    }
+
+    private Map<String, Object> buildLoginResponse(User user, boolean isNewUser) {
+        User effectiveUser = membershipAccessService.ensureMembershipActive(user);
+        String token = jwtUtil.generateToken(user.getId().toString());
+        Map<String, Object> responseData = new HashMap<>();
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put("id", effectiveUser.getId());
+        userInfo.put("nickname", effectiveUser.getNickname());
+        userInfo.put("avatar", null);
+        userInfo.put("role", effectiveUser.getRole());
+        userInfo.put("is_admin", Integer.valueOf(1).equals(effectiveUser.getRole()));
+        userInfo.put("membership_level", effectiveUser.getMembershipId());
+        userInfo.put("is_vip", membershipAccessService.isVip(effectiveUser));
+        userInfo.put("email", effectiveUser.getEmail());
+
+        responseData.put("token", token);
+        responseData.put("user", userInfo);
+        responseData.put("is_new_user", isNewUser);
+        return responseData;
+    }
+}

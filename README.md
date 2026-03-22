@@ -1,6 +1,6 @@
-﻿# OfferNow Backend
+# OfferWave Backend
 
-OfferNow 平台后端服务，提供职位查询、用户认证、职位追踪、会员体系、管理员后台及爬虫数据接入能力。
+OfferWave 平台后端服务，提供职位查询、用户认证、职位追踪、会员体系、管理员后台及爬虫数据接入能力。
 
 ## 功能概览
 - 用户注册/登录（JWT）
@@ -22,7 +22,7 @@ OfferNow 平台后端服务，提供职位查询、用户认证、职位追踪�
 
 ## 项目结构
 ```text
-src/main/java/com/offernow
+src/main/java/com/offerwave
 ├─ common         # 统一返回体、异常处理
 ├─ config         # 安全、MVC、Bean 配置
 ├─ controller     # API 控制器
@@ -45,13 +45,13 @@ src/main/resources
 
 ## 快速启动
 1. 初始化数据库
-- 执行 `offernow.sql`。
+- 执行 `offerwave.sql`。
 
 2. 修改配置
 - 编辑 `src/main/resources/application.yml`：
   - `spring.datasource.url/username/password`
   - `spring.data.redis.host/port/password`
-  - `offernow.jwt.secret`
+  - `offerwave.jwt.secret`
 
 推荐优先使用环境变量覆盖配置（避免将真实密钥写入仓库）：
 
@@ -132,7 +132,7 @@ mvn spring-boot:run
 
 ## 相关文档
 - 在线接口文档（运行后访问）：`/doc.html`
-- 数据库脚本：`offernow.sql`
+- 数据库脚本：`offerwave.sql`
 
 ## 认证规则（最新）
 - 注册必须使用 `邮箱 + 邮箱验证码 + 密码`（`POST /api/v1/auth/register`）

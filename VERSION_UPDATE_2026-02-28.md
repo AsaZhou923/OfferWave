@@ -1,4 +1,4 @@
-# OfferNow 版本更新说明（2026-02-28）
+# OfferWave 版本更新说明（2026-02-28）
 
 ## 版本信息
 
@@ -120,4 +120,4 @@
 - 当前支持三种类型：`register` / `login` / `reset_pwd`。
 
 ### 4. 初始化 SQL 补齐
-- `offernow.sql` 的 `users` 表补充 `membership_expire_at` 字段，保证试用会员到期逻辑在全量初始化场景可用。
+- `offerwave.sql` 的 `users` 表补充 `membership_expire_at` 字段，保证试用会员到期逻辑在全量初始化场景可用。

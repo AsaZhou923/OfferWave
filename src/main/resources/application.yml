@@ -1,5 +1,5 @@
 # ===================================================================
-#                      OfferNow 应用配置
+#                      OfferWave 应用配置
 # ===================================================================
 
 server:
@@ -7,14 +7,14 @@ server:
 
 spring:
   application:
-    name: offernow-backend
+    name: offerwave-backend
   servlet:
     multipart:
       max-file-size: 10MB
       max-request-size: 50MB
   datasource:
-    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/offer_now?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
-    username: ${DB_USERNAME:root}
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/offerwave?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:}
     password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
@@ -36,7 +36,7 @@ spring:
             enable: true
 
 mybatis-plus:
-  type-aliases-package: com.offernow.entity
+  type-aliases-package: com.offerwave.entity
   mapper-locations: classpath:/mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
@@ -50,14 +50,14 @@ mybatis-plus:
 knife4j:
   enable: true
   setting:
-    title: "OfferNow 平台 API 文档"
+    title: "OfferWave 平台 API 文档"
     description: "提供职位信息、用户追踪、会员管理等核心 RESTful API。"
     contact:
       name: "Xavier"
       email: "your-email@example.com"
     version: "v1.0.0"
 
-offernow:
+offerwave:
   wechat:
     appid: ${WECHAT_APPID:}
     secret: ${WECHAT_SECRET:}
@@ -67,8 +67,8 @@ offernow:
   crawler:
     api-key: ${CRAWLER_API_KEY:}
   mail:
-    from: ${MAIL_FROM}
+    from: ${MAIL_FROM:${MAIL_USERNAME:}}
   storage:
-    root-path: ${OFFERNOW_STORAGE_ROOT:${user.dir}/storage}
-    public-url-prefix: ${OFFERNOW_STORAGE_PUBLIC_URL_PREFIX:/uploads}
-    material-image-max-size: ${OFFERNOW_MATERIAL_IMAGE_MAX_SIZE:10485760}
+    root-path: ${OFFERWAVE_STORAGE_ROOT:${user.dir}/storage}
+    public-url-prefix: ${OFFERWAVE_STORAGE_PUBLIC_URL_PREFIX:/uploads}
+    material-image-max-size: ${OFFERWAVE_MATERIAL_IMAGE_MAX_SIZE:10485760}
