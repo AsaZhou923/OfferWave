@@ -26,7 +26,7 @@ spring:
   mail:
     host: ${MAIL_HOST:smtp.qq.com}
     port: ${MAIL_PORT:465}
-    username: ${MAIL_USERNAME:asazhou@qq.com}
+    username: ${MAIL_USERNAME}
     password: ${MAIL_PASSWORD:}
     properties:
       mail:
@@ -67,7 +67,7 @@ offernow:
   crawler:
     api-key: ${CRAWLER_API_KEY:}
   mail:
-    from: ${MAIL_FROM:asazhou@qq.com}
+    from: ${MAIL_FROM}
   storage:
     root-path: ${OFFERNOW_STORAGE_ROOT:${user.dir}/storage}
     public-url-prefix: ${OFFERNOW_STORAGE_PUBLIC_URL_PREFIX:/uploads}

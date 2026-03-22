@@ -89,12 +89,11 @@
 ### 3. 邮件服务配置
 
 - 使用 QQ 邮箱 SMTP 服务发信。
-- 默认发件邮箱：`asazhou@qq.com`
 - 默认配置：
   - `spring.mail.host=smtp.qq.com`
   - `spring.mail.port=465`
   - `spring.mail.properties.mail.smtp.ssl.enable=true`
-- 运行时需配置：`MAIL_PASSWORD`（QQ 邮箱 SMTP 授权码）。
+- 运行时需配置：`MAIL_USERNAME`、`MAIL_FROM`、`MAIL_PASSWORD`（QQ 邮箱 SMTP 授权码）。
 
 ### 4. 数据模型与迁移
 

@@ -53,7 +53,7 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private MembershipAccessService membershipAccessService;
 
-    @Value("${offernow.mail.from:asazhou@qq.com}")
+    @Value("${offernow.mail.from}")
     private String mailFrom;
 
     @Override

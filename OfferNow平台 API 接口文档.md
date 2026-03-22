@@ -773,7 +773,8 @@ def generate_hash(company, title, city):
 - 新增邮件配置（QQ SMTP）：
   - `spring.mail.host=smtp.qq.com`
   - `spring.mail.port=465`
-- `spring.mail.username=asazhou@qq.com`
+- `spring.mail.username=${MAIL_USERNAME}`
+- `offernow.mail.from=${MAIL_FROM}`
 - `spring.mail.password=${MAIL_PASSWORD}`
 
 ## 11. v1.1.2 更新说明（2026-03-17）
