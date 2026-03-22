@@ -1,149 +1,50 @@
 # OfferWave Backend
 
-OfferWave 平台后端服务，提供职位查询、用户认证、职位追踪、会员体系、管理员后台及爬虫数据接入能力。
+OfferWave 是一个面向求职场景的后端服务，聚焦职位信息管理、用户认证、进度追踪和后台运营支持。
 
-## 功能概览
-- 用户注册/登录（JWT）
-- 职位列表与详情查询（支持筛选、排序、分页）
-- 用户个人中心（偏好设置、我的职位、会员升级）
-- 管理员后台（职位审核/管理、用户管理、敏感词审核、系统配置）
-- 爬虫数据批量同步（仅管理员 JWT 调用）
-- 统一响应结构：`code` / `message` / `data`
+## 项目简介
 
-## 技术栈
-- Java 17
-- Spring Boot 3.1.5
-- Spring Security
-- MyBatis-Plus 3.5.3.1
-- MySQL
-- Redis
-- JWT（jjwt 0.11.5）
-- Knife4j / OpenAPI 3
+项目主要提供以下能力：
+
+- 用户注册、登录与邮箱验证码验证
+- 职位列表、职位详情与求职进度追踪
+- 会员能力与个人中心数据管理
+- 管理员后台的职位审核、用户管理和内容配置
+- 爬虫数据接入与内部同步支持
 
 ## 项目结构
+
 ```text
-src/main/java/com/offerwave
-├─ common         # 统一返回体、异常处理
-├─ config         # 安全、MVC、Bean 配置
-├─ controller     # API 控制器
-├─ dto            # 请求/响应 DTO
-├─ entity         # 数据实体
-├─ interceptor    # JWT 过滤器
-├─ mapper         # MyBatis-Plus Mapper
-├─ service        # 业务逻辑
-└─ util           # JWT 工具等
-
-src/main/resources
-└─ application.yml
+.
+├─ src/
+│  ├─ main/
+│  │  ├─ java/com/offerwave/   # 核心业务代码
+│  │  └─ resources/            # 配置与资源文件
+│  └─ test/java/com/offerwave/ # 测试代码
+├─ docs/                       # 项目文档与更新日志
+├─ .github/workflows/          # GitHub Actions 工作流
+├─ offerwave.sql               # 数据库初始化脚本
+└─ README.md
 ```
 
-## 环境要求
-- JDK 17+
-- Maven 3.8+
-- MySQL 8+
-- Redis 6+
+`src/main/java/com/offerwave` 下主要按职责划分为：
 
-## 快速启动
-1. 初始化数据库
-- 执行 `offerwave.sql`。
+- `controller`：接口入口
+- `service`：业务逻辑
+- `mapper`：数据访问
+- `entity` / `dto`：数据对象
+- `config` / `common` / `util`：公共配置与基础能力
 
-2. 修改配置
-- 编辑 `src/main/resources/application.yml`：
-  - `spring.datasource.url/username/password`
-  - `spring.data.redis.host/port/password`
-  - `offerwave.jwt.secret`
+## 快速开始
 
-推荐优先使用环境变量覆盖配置（避免将真实密钥写入仓库）：
+1. 准备数据库并执行 `offerwave.sql`
+2. 按需配置数据库、Redis、JWT、邮件等环境变量
+3. 运行 `mvn spring-boot:run`
+4. 启动后访问 `/doc.html` 查看接口文档
 
-| 环境变量 | 说明 |
-| --- | --- |
-| `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` | MySQL 连接信息 |
-| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` / `REDIS_DATABASE` | Redis 连接信息 |
-| `WECHAT_APPID` / `WECHAT_SECRET` | 微信登录配置 |
-| `JWT_SECRET` / `JWT_EXPIRATION` | JWT 密钥与过期时间 |
+## 文档
 
-> 未配置环境变量时的影响：
-> - 微信相关变量（`WECHAT_APPID` / `WECHAT_SECRET`）为空不会影响项目启动；仅在你接入微信登录功能时才需要配置。
-> - `JWT_SECRET` 未配置会使用开发默认值，仅适用于本地开发，生产环境务必显式配置。
-
-3. 启动服务
-```bash
-mvn spring-boot:run
-```
-
-4. 验证
-- 服务默认端口：`8080`
-- 文档地址：`http://localhost:8080/doc.html`
-
-## 鉴权说明
-### JWT 鉴权（用户接口）
-请求头支持以下形式：
-- `Authorization: Bearer <token>`（推荐）
-- `Authorization: <token>`（兼容）
-- `token: <token>`（兼容旧客户端）
-
-### 管理员鉴权（管理员接口 + 内部爬虫接口）
-- 请求头：`Authorization: Bearer <token>`
-- 角色要求：`role=1`（系统管理员）
-- 作用路径：
-  - `/api/v1/admin/**`
-  - `/api/v1/internal/crawler/**`
-
-## 主要接口
-### 公开接口
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `POST /api/v1/auth/login/email`
-- `POST /api/v1/auth/send-email-code`
-- `GET /api/v1/jobs`
-- `GET /api/v1/jobs/total`
-- `GET /api/v1/jobs/{id}`
-
-### 需登录接口
-- `GET /api/v1/user/me`
-- `PUT /api/v1/user/preferences`
-- `POST /api/v1/user/membership/upgrade`
-- `POST /api/v1/user/jobs/{job_id}/status`
-- `GET /api/v1/user/my-jobs`
-- `GET /api/v1/memberships`
-
-### 内部接口
-- `POST /api/v1/internal/crawler/sync`
-
-### 管理员接口（节选）
-- `GET /api/v1/admin/jobs/pending-audit`
-- `POST /api/v1/admin/jobs/audit`
-- `POST /api/v1/admin/jobs/import-file`
-- `GET /api/v1/admin/crawler/sync-logs`
-- `GET /api/v1/admin/crawler/error-items`
-- `GET /api/v1/admin/users`
-- `PUT /api/v1/admin/users/{id}/status`
-- `GET /api/v1/admin/moderation/sensitive-words`
-- `GET /api/v1/admin/configs`
-
-## 响应示例
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {}
-}
-```
-
-## 相关文档
-- 在线接口文档（运行后访问）：`/doc.html`
+- 接口文档：运行后访问 `/doc.html`
+- 静态接口文档：`docs/OfferWave平台 API 接口文档.md`
+- 更新日志：`docs/`
 - 数据库脚本：`offerwave.sql`
-
-## 认证规则（最新）
-- 注册必须使用 `邮箱 + 邮箱验证码 + 密码`（`POST /api/v1/auth/register`）
-- 注册成功后，邮箱即账户标识（系统会自动生成内部 `username`）
-- 登录支持两种方式：
-  - 邮箱 + 密码：`POST /api/v1/auth/login`（将邮箱填入 `username` 字段）
-  - 邮箱 + 验证码：`POST /api/v1/auth/login/email`
-- 邮箱验证码发送类型支持：`register` / `login` / `reset_pwd`
-- 新注册用户自动获得 7 天试用会员（VIP），到期后按到期逻辑回落
-
-## 注意事项
-- 当前 `application.yml` 含示例/开发配置，部署前请替换为真实安全配置。
-- 建议通过环境变量或配置中心管理密钥与数据库凭据。
-- 如遇中文注释乱码，请确认终端/IDE 文件编码为 UTF-8。
