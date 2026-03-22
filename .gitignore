@@ -8,6 +8,7 @@
 /.idea/
 *.iml
 /.vscode/launch.json
+/.vscode/settings.json
 
 # Local dependency cache
 /.m2/
