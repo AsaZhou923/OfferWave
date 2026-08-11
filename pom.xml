@@ -17,7 +17,7 @@
         <java.version>17</java.version>
         <mybatis-plus.version>3.5.3.1</mybatis-plus.version>
         <knife4j.version>4.3.0</knife4j.version>
-        <hutool.version>5.8.22</hutool.version>
+        <hutool.version>5.8.47</hutool.version>
         <jjwt.version>0.11.5</jjwt.version>
         <flyway.version>11.20.2</flyway.version>
         <lombok.version>1.18.38</lombok.version>
