@@ -30,7 +30,6 @@ public class BeanConfig {
     @Bean
     public OpenAPI customOpenAPI() {
         final String jwtSchemeName = "Authorization";
-        final String apiKeySchemeName = "ApiKeyAuth";
         return new OpenAPI()
                 .info(new Info().title("OfferWave API").version("1.0").description("OfferWave 平台接口文档"))
                 .addSecurityItem(new SecurityRequirement().addList(jwtSchemeName))
@@ -42,12 +41,6 @@ public class BeanConfig {
                                                 .type(SecurityScheme.Type.HTTP)
                                                 .scheme("bearer")
                                                 .bearerFormat("JWT")
-                                )
-                                .addSecuritySchemes(apiKeySchemeName,
-                                        new SecurityScheme()
-                                                .name("X-API-KEY")
-                                                .type(SecurityScheme.Type.APIKEY)
-                                                .in(SecurityScheme.In.HEADER)
                                 )
                 );
     }

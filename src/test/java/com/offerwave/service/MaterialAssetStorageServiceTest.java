@@ -35,7 +35,7 @@ class MaterialAssetStorageServiceTest {
                 "files",
                 "cover.png",
                 "image/png",
-                "fake-image-content".getBytes()
+                pngBytes()
         );
 
         List<MaterialImageUploadDto> uploaded = storageService.uploadImages(List.of(file));
@@ -72,5 +72,65 @@ class MaterialAssetStorageServiceTest {
         );
 
         assertTrue(exception.getMessage().contains("jpg"));
+    }
+
+    @Test
+    void uploadImagesShouldRejectContentWhoseSignatureDoesNotMatchExtension() {
+        StorageProperties storageProperties = new StorageProperties();
+        storageProperties.setRootPath(tempDir.toString());
+        storageProperties.setPublicUrlPrefix("/uploads");
+
+        MaterialAssetStorageService storageService = new MaterialAssetStorageService();
+        ReflectionTestUtils.setField(storageService, "storageProperties", storageProperties);
+
+        MockMultipartFile file = new MockMultipartFile(
+                "files",
+                "forged.png",
+                "image/png",
+                "not-really-a-png".getBytes()
+        );
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> storageService.uploadImages(List.of(file))
+        );
+
+        assertTrue(exception.getMessage().contains("内容"));
+        assertEquals(0L, countRegularFiles(tempDir));
+    }
+
+    @Test
+    void uploadImagesShouldRejectSignatureFromDifferentAllowedImageType() {
+        StorageProperties storageProperties = new StorageProperties();
+        storageProperties.setRootPath(tempDir.toString());
+        storageProperties.setPublicUrlPrefix("/uploads");
+
+        MaterialAssetStorageService storageService = new MaterialAssetStorageService();
+        ReflectionTestUtils.setField(storageService, "storageProperties", storageProperties);
+
+        MockMultipartFile file = new MockMultipartFile(
+                "files",
+                "renamed.jpg",
+                "image/jpeg",
+                pngBytes()
+        );
+
+        assertThrows(IllegalArgumentException.class, () -> storageService.uploadImages(List.of(file)));
+        assertEquals(0L, countRegularFiles(tempDir));
+    }
+
+    private static byte[] pngBytes() {
+        return new byte[]{
+                (byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+                0x00, 0x00, 0x00, 0x00
+        };
+    }
+
+    private static long countRegularFiles(Path root) {
+        try (var paths = Files.walk(root)) {
+            return paths.filter(Files::isRegularFile).count();
+        } catch (Exception ex) {
+            throw new AssertionError(ex);
+        }
     }
 }

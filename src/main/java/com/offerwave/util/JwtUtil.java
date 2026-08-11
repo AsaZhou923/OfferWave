@@ -1,102 +1,140 @@
 package com.offerwave.util;
 
+import com.offerwave.entity.User;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.io.Encoders;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
+import javax.crypto.Mac;
 import javax.crypto.SecretKey;
-import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
 /**
- * JWT 工具类：负责生成、解析和校验 Token。
+ * JWT issuance and validation with a deployment-provided Base64 HMAC key.
  */
 @Component
-public class JwtUtil implements Serializable {
+public final class JwtUtil {
 
-    private static final long serialVersionUID = -2550185165626007488L;
+    private static final String CREDENTIAL_VERSION_CLAIM = "cv";
+    private static final int MINIMUM_KEY_BYTES = 32;
 
-    /** JWT 签名密钥 */
-    @Value("${offerwave.jwt.secret}")
-    private String secret;
+    private final SecretKey signingKey;
+    private final long expiration;
 
-    /** Token 过期时间（毫秒） */
-    @Value("${offerwave.jwt.expiration}")
-    private Long expiration;
-
-    private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes());
+    public JwtUtil(
+            @Value("${offerwave.jwt.secret:}") String encodedSecret,
+            @Value("${offerwave.jwt.expiration:86400000}") Long expiration) {
+        this.signingKey = decodeSigningKey(encodedSecret);
+        if (expiration == null || expiration <= 0) {
+            throw new IllegalStateException("offerwave.jwt.expiration must be a positive number of milliseconds");
+        }
+        this.expiration = expiration;
     }
 
-    /**
-     * 从 token 中获取主题（用户标识）。
-     */
     public String getSubjectFromToken(String token) {
         return getClaimFromToken(token, Claims::getSubject);
     }
 
-    /**
-     * 从 token 中获取过期时间。
-     */
     public Date getExpirationDateFromToken(String token) {
         return getClaimFromToken(token, Claims::getExpiration);
     }
 
-    /**
-     * 从 token 中提取指定 claim。
-     */
     public <T> T getClaimFromToken(String token, Function<Claims, T> claimsResolver) {
-        final Claims claims = getAllClaimsFromToken(token);
+        Claims claims = getAllClaimsFromToken(token);
         return claimsResolver.apply(claims);
     }
 
-    /**
-     * 解析 token，获取全部 claims。
-     */
-    private Claims getAllClaimsFromToken(String token) {
-        return Jwts.parserBuilder().setSigningKey(getSigningKey()).build().parseClaimsJws(token).getBody();
-    }
-
-    /**
-     * 判断 token 是否过期。
-     */
-    private Boolean isTokenExpired(String token) {
-        final Date expirationDate = getExpirationDateFromToken(token);
-        return expirationDate.before(new Date());
-    }
-
-    /**
-     * 为指定用户生成 token。
-     */
-    public String generateToken(String subject) {
+    public String generateToken(User user) {
+        if (user == null || user.getId() == null) {
+            throw new IllegalArgumentException("Cannot issue a token without a persisted user ID");
+        }
         Map<String, Object> claims = new HashMap<>();
-        return doGenerateToken(claims, subject);
+        claims.put(CREDENTIAL_VERSION_CLAIM, credentialVersion(user.getPasswordHash()));
+        return doGenerateToken(claims, user.getId().toString());
+    }
+
+    /**
+     * Changing a password changes the credential-version claim, invalidating
+     * all tokens issued for the previous password without extra server state.
+     */
+    public boolean validateToken(String token, User user) {
+        if (user == null || user.getId() == null) {
+            return false;
+        }
+        try {
+            Claims claims = getAllClaimsFromToken(token);
+            String tokenVersion = claims.get(CREDENTIAL_VERSION_CLAIM, String.class);
+            String currentVersion = credentialVersion(user.getPasswordHash());
+            return user.getId().toString().equals(claims.getSubject())
+                    && tokenVersion != null
+                    && MessageDigest.isEqual(
+                            tokenVersion.getBytes(StandardCharsets.UTF_8),
+                            currentVersion.getBytes(StandardCharsets.UTF_8));
+        } catch (JwtException | IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    private Claims getAllClaimsFromToken(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(signingKey)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
     }
 
     private String doGenerateToken(Map<String, Object> claims, String subject) {
-        final Date createdDate = new Date();
-        final Date expirationDate = new Date(createdDate.getTime() + expiration);
-
+        Date createdDate = new Date();
+        Date expirationDate = new Date(createdDate.getTime() + expiration);
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(subject)
                 .setIssuedAt(createdDate)
                 .setExpiration(expirationDate)
-                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .signWith(signingKey, SignatureAlgorithm.HS256)
                 .compact();
     }
 
-    /**
-     * 校验 token 是否有效。
-     */
-    public Boolean validateToken(String token, String subject) {
-        final String tokenSubject = getSubjectFromToken(token);
-        return (tokenSubject.equals(subject) && !isTokenExpired(token));
+    private String credentialVersion(String passwordHash) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(signingKey);
+            byte[] digest = mac.doFinal(
+                    (passwordHash == null ? "" : passwordHash).getBytes(StandardCharsets.UTF_8));
+            return Encoders.BASE64URL.encode(digest);
+        } catch (GeneralSecurityException ex) {
+            throw new IllegalStateException("Unable to derive JWT credential version", ex);
+        }
+    }
+
+    private SecretKey decodeSigningKey(String encodedSecret) {
+        if (!StringUtils.hasText(encodedSecret)) {
+            throw new IllegalStateException(
+                    "JWT_SECRET is required and must be Base64 encoding of at least 32 random bytes");
+        }
+        final byte[] keyBytes;
+        try {
+            keyBytes = Decoders.BASE64.decode(encodedSecret.trim());
+        } catch (RuntimeException ex) {
+            throw new IllegalStateException(
+                    "JWT_SECRET must be valid Base64 encoding of at least 32 random bytes", ex);
+        }
+        if (keyBytes.length < MINIMUM_KEY_BYTES) {
+            throw new IllegalStateException("JWT_SECRET must decode to at least 32 bytes for HS256");
+        }
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 }

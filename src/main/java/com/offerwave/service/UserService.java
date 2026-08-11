@@ -35,12 +35,4 @@ public interface UserService {
      */
     List<Membership> listMemberships();
 
-    /**
-     * 模拟会员升级。
-     *
-     * @param userId 当前用户 ID
-     * @param targetLevelId 目标等级 ID
-     * @return 升级结果信息
-     */
-    Map<String, Object> upgradeMembership(Long userId, Integer targetLevelId);
 }

@@ -13,6 +13,10 @@ import java.util.HashMap;
 @Data
 public class R<T> implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
+    static final String INTERNAL_ERROR_MESSAGE = "服务器内部错误";
+
     /** 业务状态码，200 表示成功 */
     private Integer code;
 
@@ -34,15 +38,12 @@ public class R<T> implements Serializable {
     }
 
     public static <T> R<T> error(String msg) {
-        R<T> r = new R<>();
-        r.message = msg;
-        r.code = 500;
-        return r;
+        return error(500, msg);
     }
 
     public static <T> R<T> error(int code, String msg) {
         R<T> r = new R<>();
-        r.message = msg;
+        r.message = code >= 500 ? INTERNAL_ERROR_MESSAGE : msg;
         r.code = code;
         return r;
     }

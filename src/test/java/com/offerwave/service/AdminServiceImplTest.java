@@ -35,13 +35,13 @@ class AdminServiceImplTest {
         AdminJobUpsertDto importedJob = buildJob("OfferWave", "Java工程师", "上海");
         importedJob.setAnnouncement("first");
 
-        AdminJobUpsertDto duplicatedJob = buildJob("OfferWave", "Java工程师", "上海");
+        AdminJobUpsertDto duplicatedJob = buildJob(" offerwave ", "Java工程师 ", " 上海");
         duplicatedJob.setAnnouncement("latest");
 
         AdminJobUpsertDto existingJob = buildJob("Existing Co", "测试工程师", "北京");
 
         Job existing = new Job();
-        existing.setUniqueHash(md5("Existing Co_测试工程师_北京"));
+        existing.setUniqueHash(md5("existing co|测试工程师|北京"));
 
         when(jobMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(existing));
         when(jobMapper.insert(any(Job.class))).thenReturn(1);
@@ -54,7 +54,7 @@ class AdminServiceImplTest {
         verify(jobMapper, times(1)).insert(jobCaptor.capture());
 
         Job savedJob = jobCaptor.getValue();
-        assertEquals(md5("OfferWave_Java工程师_上海"), savedJob.getUniqueHash());
+        assertEquals(md5("offerwave|java工程师|上海"), savedJob.getUniqueHash());
         assertEquals("latest", savedJob.getAnnouncement());
         assertEquals("人工导入", savedJob.getSourceOrigin());
         assertEquals(1, savedJob.getAuditStatus());

@@ -14,7 +14,7 @@ public class CrawlerJobItemDto implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    @Schema(description = "核心去重字段（MD5: 公司名_职位名_城市）")
+    @Schema(description = "兼容字段；服务端会按规范化后的公司名、职位名、城市重新计算")
     private String uniqueHash;
 
     @Schema(description = "公司名称", requiredMode = Schema.RequiredMode.REQUIRED)

@@ -3,6 +3,7 @@ package com.offerwave.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.offerwave.common.R;
 import com.offerwave.dto.AdminJobUpsertDto;
+import com.offerwave.dto.AdminUserResponseDto;
 import com.offerwave.dto.BatchCompanyStageUpdateDto;
 import com.offerwave.dto.JobAuditBatchDto;
 import com.offerwave.dto.SensitiveWordUpsertDto;
@@ -25,6 +26,8 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -46,6 +49,8 @@ import java.util.Map;
 @Tag(name = "管理员后台")
 @SecurityRequirement(name = "Authorization")
 public class AdminController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(AdminController.class);
 
     @Autowired
     private AdminService adminService;
@@ -116,9 +121,11 @@ public class AdminController {
             int inserted = adminService.batchCreateJobs(jobs);
             return R.success(Map.of("received_count", jobs.size(), "inserted_count", inserted));
         } catch (IllegalArgumentException ex) {
-            return R.error(400, ex.getMessage());
+            LOGGER.warn("Job import rejected due to invalid content", ex);
+            return R.error(400, "导入文件格式或内容不符合要求");
         } catch (IOException ex) {
-            return R.error(400, "文件解析失败: " + ex.getMessage());
+            LOGGER.warn("Job import parsing failed", ex);
+            return R.error(400, "文件解析失败，请检查文件后重试");
         }
     }
 
@@ -164,12 +171,18 @@ public class AdminController {
 
     @GetMapping("/users")
     @Operation(summary = "用户列表")
-    public R<Page<User>> listUsers(
+    public R<Page<AdminUserResponseDto>> listUsers(
             @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
             @Parameter(description = "每页数量") @RequestParam(defaultValue = "20") int size,
             @Parameter(description = "关键词（用户名/邮箱）") @RequestParam(required = false) String keyword,
             @Parameter(description = "账号状态：1正常/0封禁") @RequestParam(required = false) Integer accountStatus) {
-        return R.success(adminService.listUsers(new Page<>(page, size), keyword, accountStatus));
+        if (page < 1 || size < 1 || size > 100) {
+            return R.error(400, "分页参数必须满足 page >= 1 且 1 <= size <= 100");
+        }
+        Page<User> users = adminService.listUsers(new Page<>(page, size), keyword, accountStatus);
+        Page<AdminUserResponseDto> response = new Page<>(users.getCurrent(), users.getSize(), users.getTotal());
+        response.setRecords(users.getRecords().stream().map(AdminUserResponseDto::from).toList());
+        return R.success(response);
     }
 
     @PutMapping("/users/{id}/status")

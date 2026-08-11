@@ -1,10 +1,12 @@
 package com.offerwave.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
+import lombok.ToString;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
@@ -27,6 +29,8 @@ public class User implements Serializable {
     private String email;
 
     /** BCrypt 密码哈希 */
+    @JsonIgnore
+    @ToString.Exclude
     private String passwordHash;
 
     private Integer role;

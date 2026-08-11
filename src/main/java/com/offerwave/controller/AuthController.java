@@ -1,6 +1,8 @@
 package com.offerwave.controller;
 
 import com.offerwave.common.R;
+import com.offerwave.common.AuthRequestException;
+import com.offerwave.config.OfferWaveSecurityProperties;
 import com.offerwave.dto.EmailCodeLoginDto;
 import com.offerwave.dto.RegisterDto;
 import com.offerwave.dto.ResetPasswordDto;
@@ -18,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.Map;
 
 @RestController
@@ -25,8 +29,14 @@ import java.util.Map;
 @Tag(name = "认证模块", description = "处理用户认证相关能力")
 public class AuthController {
 
+    private static final String EMAIL_CODE_ACCEPTED_MESSAGE =
+            "如果该邮箱符合条件，验证码将发送，请注意查收";
+
     @Autowired
     private AuthService authService;
+
+    @Autowired
+    private OfferWaveSecurityProperties securityProperties;
 
     @PostMapping("/login")
     @Operation(summary = "账号密码登录", description = "用户通过用户名或邮箱和密码获取 JWT Token")
@@ -34,8 +44,8 @@ public class AuthController {
             @Parameter(description = "登录参数") @Validated @RequestBody UsernamePasswordLoginDto loginDto) {
         try {
             return R.success(authService.login(loginDto));
-        } catch (Exception e) {
-            return R.error(401, "登录失败: " + e.getMessage());
+        } catch (AuthRequestException ex) {
+            return R.error(ex.getStatusCode(), ex.getPublicMessage());
         }
     }
 
@@ -45,8 +55,8 @@ public class AuthController {
         try {
             authService.register(registerDto);
             return R.success("注册成功");
-        } catch (Exception e) {
-            return R.error(400, "注册失败: " + e.getMessage());
+        } catch (AuthRequestException ex) {
+            return R.error(ex.getStatusCode(), ex.getPublicMessage());
         }
     }
 
@@ -57,11 +67,9 @@ public class AuthController {
             @Parameter(hidden = true) HttpServletRequest request) {
         try {
             authService.sendEmailCode(dto, resolveClientIp(request));
-            return R.success("验证码发送成功");
-        } catch (IllegalStateException e) {
-            return R.error(429, e.getMessage());
-        } catch (Exception e) {
-            return R.error(400, "验证码发送失败: " + e.getMessage());
+            return R.success(EMAIL_CODE_ACCEPTED_MESSAGE);
+        } catch (AuthRequestException ex) {
+            return R.error(ex.getStatusCode(), ex.getPublicMessage());
         }
     }
 
@@ -71,8 +79,8 @@ public class AuthController {
             @Parameter(description = "邮箱验证码登录参数") @Validated @RequestBody EmailCodeLoginDto dto) {
         try {
             return R.success(authService.loginByEmailCode(dto));
-        } catch (Exception e) {
-            return R.error(401, "登录失败: " + e.getMessage());
+        } catch (AuthRequestException ex) {
+            return R.error(ex.getStatusCode(), ex.getPublicMessage());
         }
     }
 
@@ -83,20 +91,39 @@ public class AuthController {
         try {
             authService.resetPassword(dto);
             return R.success("密码重置成功");
-        } catch (Exception e) {
-            return R.error(400, "密码重置失败: " + e.getMessage());
+        } catch (AuthRequestException ex) {
+            return R.error(ex.getStatusCode(), ex.getPublicMessage());
         }
     }
 
     private String resolveClientIp(HttpServletRequest request) {
+        String remoteAddress = request.getRemoteAddr();
+        if (!securityProperties.isTrustedProxy(remoteAddress)) {
+            return remoteAddress;
+        }
         String xff = request.getHeader("X-Forwarded-For");
         if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
+            String forwardedAddress = xff.split(",")[0].trim();
+            if (isNumericIpAddress(forwardedAddress)) {
+                return forwardedAddress;
+            }
         }
         String realIp = request.getHeader("X-Real-IP");
-        if (realIp != null && !realIp.isBlank()) {
+        if (realIp != null && isNumericIpAddress(realIp.trim())) {
             return realIp.trim();
         }
-        return request.getRemoteAddr();
+        return remoteAddress;
+    }
+
+    private boolean isNumericIpAddress(String value) {
+        if (value == null || value.length() > 45 || !value.matches("[0-9a-fA-F:.]+")) {
+            return false;
+        }
+        try {
+            InetAddress.getByName(value);
+            return true;
+        } catch (UnknownHostException ex) {
+            return false;
+        }
     }
 }

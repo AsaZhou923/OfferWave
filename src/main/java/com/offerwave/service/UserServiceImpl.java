@@ -13,8 +13,6 @@ import com.offerwave.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -123,35 +121,4 @@ public class UserServiceImpl implements UserService {
         return memberships;
     }
 
-    @Override
-    public Map<String, Object> upgradeMembership(Long userId, Integer targetLevelId) {
-        User user = userMapper.selectById(userId);
-        if (user == null) {
-            throw new RuntimeException("用户不存在");
-        }
-        Membership targetMembership = membershipMapper.selectById(targetLevelId);
-        if (targetMembership == null) {
-            throw new RuntimeException("目标会员等级不存在");
-        }
-
-        user.setMembershipId(targetLevelId);
-        if (targetMembership.getDurationDays() != null && targetMembership.getDurationDays() > 0) {
-            user.setMembershipExpireAt(LocalDateTime.now().plusDays(targetMembership.getDurationDays()));
-        } else {
-            user.setMembershipExpireAt(null);
-        }
-        userMapper.updateById(user);
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("current_level", targetMembership.getLevelName());
-
-        String expireDate = "永久";
-        if (targetMembership.getDurationDays() != -1) {
-            expireDate = LocalDate.now().plusDays(targetMembership.getDurationDays())
-                    .format(DateTimeFormatter.ISO_LOCAL_DATE);
-        }
-        response.put("expire_date", expireDate);
-
-        return response;
-    }
 }
