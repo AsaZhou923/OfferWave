@@ -403,20 +403,18 @@ public class MaterialPackageServiceImpl implements MaterialPackageService {
     }
 
     private void incrementViewCount(MaterialPackage materialPackage) {
+        if (materialPackageMapper.incrementViewCount(materialPackage.getId()) <= 0) {
+            throw new NotFoundException("资料包不存在");
+        }
         long nextCount = materialPackage.getViewCount() == null ? 1L : materialPackage.getViewCount() + 1L;
-        MaterialPackage patch = new MaterialPackage();
-        patch.setId(materialPackage.getId());
-        patch.setViewCount(nextCount);
-        materialPackageMapper.updateById(patch);
         materialPackage.setViewCount(nextCount);
     }
 
     private void incrementDownloadCount(MaterialPackage materialPackage) {
+        if (materialPackageMapper.incrementDownloadCount(materialPackage.getId()) <= 0) {
+            throw new NotFoundException("资料包不存在");
+        }
         long nextCount = materialPackage.getDownloadCount() == null ? 1L : materialPackage.getDownloadCount() + 1L;
-        MaterialPackage patch = new MaterialPackage();
-        patch.setId(materialPackage.getId());
-        patch.setDownloadCount(nextCount);
-        materialPackageMapper.updateById(patch);
         materialPackage.setDownloadCount(nextCount);
     }
 }

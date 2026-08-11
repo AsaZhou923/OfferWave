@@ -15,14 +15,13 @@ import com.offerwave.mapper.JobMapper;
 import com.offerwave.mapper.MembershipMapper;
 import com.offerwave.mapper.SystemConfigMapper;
 import com.offerwave.mapper.UserMapper;
+import com.offerwave.util.JobUniqueHashGenerator;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.DigestUtils;
 import org.springframework.util.StringUtils;
 
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -172,7 +171,8 @@ public class AdminServiceImpl implements AdminService {
 
         Job job = new Job();
         BeanUtils.copyProperties(dto, job);
-        job.setUniqueHash(buildUniqueHash(job.getCompanyName(), job.getJobTitle(), job.getCity()));
+        job.setUniqueHash(JobUniqueHashGenerator.generate(
+                job.getCompanyName(), job.getJobTitle(), job.getCity()));
         if (job.getAuditStatus() == null) {
             job.setAuditStatus(1);
         }
@@ -180,11 +180,6 @@ public class AdminServiceImpl implements AdminService {
             job.setSourceOrigin("人工导入");
         }
         return job;
-    }
-
-    private String buildUniqueHash(String companyName, String jobTitle, String city) {
-        String raw = companyName + "_" + jobTitle + "_" + city;
-        return DigestUtils.md5DigestAsHex(raw.getBytes(StandardCharsets.UTF_8));
     }
 
     @Override

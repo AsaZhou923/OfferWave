@@ -37,6 +37,9 @@ public class SecurityConfig {
     @Autowired
     private StorageProperties storageProperties;
 
+    @Autowired
+    private OfferWaveSecurityProperties securityProperties;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -67,6 +70,7 @@ public class SecurityConfig {
                                 "/webjars/**",
                                 "/swagger-resources/**",
                                 "/v3/api-docs/**",
+                                "/error",
                                 "/api/v1/jobs/**"
                         ).permitAll()
                         .anyRequest().authenticated()
@@ -79,17 +83,16 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(Collections.singletonList("*"));
+        configuration.setAllowedOrigins(securityProperties.getCorsAllowedOrigins());
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList(
                 "Authorization",
-                "X-API-KEY",
                 "Content-Type",
                 "X-Requested-With",
                 "Accept"
         ));
-        configuration.setExposedHeaders(Collections.singletonList("Authorization"));
-        configuration.setAllowCredentials(true);
+        configuration.setExposedHeaders(Collections.emptyList());
+        configuration.setAllowCredentials(false);
         configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

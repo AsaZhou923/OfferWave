@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: offerwave
+          MYSQL_USER: offerwave
+          MYSQL_PASSWORD: offerwave-ci
+          MYSQL_ROOT_PASSWORD: root-ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -proot-ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      DB_URL: jdbc:mysql://127.0.0.1:3306/offerwave?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false
+      DB_USERNAME: offerwave
+      DB_PASSWORD: offerwave-ci
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      MAIL_USERNAME: ci@example.invalid
+      MAIL_PASSWORD: disabled
+      JWT_SECRET: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      SERVER_PORT: 18080
+      OFFERWAVE_STORAGE_ROOT: ${{ github.workspace }}/target/ci-storage
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Run Java verification
+        run: mvn --batch-mode --no-transfer-progress clean verify
+
+      - name: Run performance SLO regression tests
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/performance -p 'test_*.py' -v
+
+      - name: Run high-priority SpotBugs gate
+        run: >-
+          mvn --batch-mode --no-transfer-progress
+          com.github.spotbugs:spotbugs-maven-plugin:4.8.6.6:check
+          -Dspotbugs.effort=Max
+          -Dspotbugs.threshold=High
+          -Dspotbugs.failOnError=true
+
+      - name: Smoke-test empty-schema migration and jobs API
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_jar="$(find target -maxdepth 1 -type f -name 'offerwave-backend-*.jar' -print -quit)"
+          if [[ -z "$app_jar" ]]; then
+            echo "Packaged OfferWave jar was not found"
+            exit 1
+          fi
+          java -jar "$app_jar" > target/ci-startup.log 2>&1 &
+          app_pid=$!
+          cleanup() {
+            kill "$app_pid" 2>/dev/null || true
+            wait "$app_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          for attempt in $(seq 1 60); do
+            if ! kill -0 "$app_pid" 2>/dev/null; then
+              echo "OfferWave exited before becoming healthy"
+              tail -200 target/ci-startup.log
+              exit 1
+            fi
+
+            http_status="$(curl --silent --show-error --output target/jobs-response.json \
+              --write-out '%{http_code}' \
+              'http://127.0.0.1:18080/api/v1/jobs?page=1&size=20&sort=newest' || true)"
+            if [[ "$http_status" == "200" ]] && grep -q '"code"[[:space:]]*:[[:space:]]*200' target/jobs-response.json; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "OfferWave did not serve a successful jobs response within 120 seconds"
+          tail -200 target/ci-startup.log
+          if [[ -f target/jobs-response.json ]]; then
+            sed -n '1,120p' target/jobs-response.json
+          fi
+          exit 1
+
+      - name: Upload smoke-test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offerwave-ci-diagnostics
+          path: |
+            target/ci-startup.log
+            target/jobs-response.json
+            target/spotbugsXml.xml
+          if-no-files-found: ignore
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+      - name: Reject newly introduced vulnerable dependencies
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high

@@ -19,6 +19,8 @@ import com.offerwave.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -54,10 +56,18 @@ public class TrackingServiceImpl implements TrackingService {
     private MembershipAccessService membershipAccessService;
 
     @Override
+    @Transactional
     public void updateJobStatus(Long userId, Long jobId, UpdateJobStatusDto dto) {
+        validateUpdate(dto);
+
         Job job = jobMapper.selectById(jobId);
         if (job == null) {
             throw new NotFoundException("职位不存在");
+        }
+
+        User lockedUser = userMapper.selectByIdForUpdate(userId);
+        if (lockedUser == null) {
+            throw new PrivilegeException("用户不存在，无法校验追踪权限");
         }
 
         LambdaQueryWrapper<UserJobStatus> queryWrapper = new LambdaQueryWrapper<>();
@@ -74,7 +84,7 @@ public class TrackingServiceImpl implements TrackingService {
             status.setUserNote(contentModerationService.sanitizeUserNote(userId, dto.getUserNote()));
 
             if (isTracked(status.getIsCollected(), status.getDeliveryStatus())) {
-                checkUserPrivileges(userId);
+                checkUserPrivileges(lockedUser);
             }
             userJobStatusMapper.insert(status);
         } else {
@@ -89,7 +99,7 @@ public class TrackingServiceImpl implements TrackingService {
 
             boolean isTrackedNow = isTracked(status.getIsCollected(), status.getDeliveryStatus());
             if (!wasTracked && isTrackedNow) {
-                checkUserPrivileges(userId);
+                checkUserPrivileges(lockedUser);
             }
             userJobStatusMapper.updateById(status);
         }
@@ -148,51 +158,85 @@ public class TrackingServiceImpl implements TrackingService {
         return Boolean.TRUE.equals(isCollected) || (deliveryStatus != null && deliveryStatus > 0);
     }
 
+    private void validateUpdate(UpdateJobStatusDto dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("职位状态参数不能为空");
+        }
+        Integer deliveryStatus = dto.getDeliveryStatus();
+        if (deliveryStatus != null && (deliveryStatus < 0 || deliveryStatus > 5)) {
+            throw new IllegalArgumentException("投递状态码必须在 0 到 5 之间");
+        }
+        if (dto.getUserNote() != null && dto.getUserNote().length() > 200) {
+            throw new IllegalArgumentException("用户备注最多 200 字");
+        }
+    }
+
     /**
      * 检查用户是否超过会员可追踪职位数量上限。
      */
-    private void checkUserPrivileges(Long userId) {
-        User user = userMapper.selectById(userId);
-        if (user == null) {
-            throw new PrivilegeException("用户不存在，无法校验追踪权限");
+    private void checkUserPrivileges(User lockedUser) {
+        User user = membershipAccessService.ensureMembershipActive(lockedUser);
+        if (user == null || user.getId() == null || user.getMembershipId() == null) {
+            throw unavailableQuotaConfiguration();
         }
-        user = membershipAccessService.ensureMembershipActive(user);
 
         Membership membership = membershipMapper.selectById(user.getMembershipId());
         if (membership == null) {
-            return; // 没有会员信息时按不限制处理
+            throw unavailableQuotaConfiguration();
         }
 
         if (user.getCustomTrackLimit() != null) {
-            if (user.getCustomTrackLimit() < 0) {
+            if (user.getCustomTrackLimit() == -1) {
                 return;
             }
-            LambdaQueryWrapper<UserJobStatus> countWrapper = new LambdaQueryWrapper<>();
-            countWrapper.eq(UserJobStatus::getUserId, userId);
-            countWrapper.and(w -> w.eq(UserJobStatus::getIsCollected, true).or().gt(UserJobStatus::getDeliveryStatus, 0));
-            long currentCount = userJobStatusMapper.selectCount(countWrapper);
+            if (user.getCustomTrackLimit() < 0) {
+                throw unavailableQuotaConfiguration();
+            }
+            long currentCount = countTrackedJobs(user.getId());
             if (currentCount >= user.getCustomTrackLimit()) {
                 throw new PrivilegeException("当前账号追踪额度已达上限：" + user.getCustomTrackLimit());
             }
             return;
         }
 
-        if (membership.getPrivileges() == null)
+        if (!StringUtils.hasText(membership.getPrivileges())) {
+            throw unavailableQuotaConfiguration();
+        }
+
+        final Integer maxTrack;
+        try {
+            JSONObject privileges = JSONUtil.parseObj(membership.getPrivileges());
+            maxTrack = privileges.getInt("max_job_track");
+        } catch (RuntimeException ex) {
+            throw unavailableQuotaConfiguration();
+        }
+
+        if (maxTrack == null) {
+            throw unavailableQuotaConfiguration();
+        }
+
+        if (maxTrack == -1 || maxTrack == 999)
             return;
 
-        JSONObject privileges = JSONUtil.parseObj(membership.getPrivileges());
-        Integer maxTrack = privileges.getInt("max_job_track");
+        if (maxTrack < 0) {
+            throw unavailableQuotaConfiguration();
+        }
 
-        if (maxTrack == null || maxTrack == -1 || maxTrack == 999)
-            return;
-
-        LambdaQueryWrapper<UserJobStatus> countWrapper = new LambdaQueryWrapper<>();
-        countWrapper.eq(UserJobStatus::getUserId, userId);
-        countWrapper.and(w -> w.eq(UserJobStatus::getIsCollected, true).or().gt(UserJobStatus::getDeliveryStatus, 0));
-        long currentCount = userJobStatusMapper.selectCount(countWrapper);
+        long currentCount = countTrackedJobs(user.getId());
 
         if (currentCount >= maxTrack) {
             throw new PrivilegeException("普通用户只能追踪" + maxTrack + "个职位，请升级 VIP 解锁无限权益");
         }
+    }
+
+    private long countTrackedJobs(Long userId) {
+        LambdaQueryWrapper<UserJobStatus> countWrapper = new LambdaQueryWrapper<>();
+        countWrapper.eq(UserJobStatus::getUserId, userId);
+        countWrapper.and(w -> w.eq(UserJobStatus::getIsCollected, true).or().gt(UserJobStatus::getDeliveryStatus, 0));
+        return userJobStatusMapper.selectCount(countWrapper);
+    }
+
+    private PrivilegeException unavailableQuotaConfiguration() {
+        return new PrivilegeException("会员追踪额度配置不可用，请联系管理员");
     }
 }

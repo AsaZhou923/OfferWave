@@ -1,6 +1,7 @@
 package com.offerwave.service;
 
 import cn.hutool.core.util.RandomUtil;
+import com.offerwave.common.AuthRequestException;
 import com.offerwave.dto.EmailCodeLoginDto;
 import com.offerwave.dto.RegisterDto;
 import com.offerwave.dto.ResetPasswordDto;
@@ -12,16 +13,20 @@ import com.offerwave.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -32,8 +37,33 @@ public class AuthServiceImpl implements AuthService {
     private static final Duration SEND_COOLDOWN = Duration.ofMinutes(1);
     private static final Duration DAILY_LIMIT_TTL = Duration.ofDays(1);
     private static final long DAILY_LIMIT = 10L;
+    private static final int MAX_CODE_VERIFY_ATTEMPTS = 5;
     private static final int TRIAL_MEMBERSHIP_ID = 2;
     private static final int TRIAL_DAYS = 7;
+    private static final String DUMMY_PASSWORD_HASH =
+            "$2a$10$dXJ3SW6G7P50lGmMkkmwe.20cKcLSFnmyMIjZK5ZpAqIzYAYug69S";
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final DefaultRedisScript<Long> CONSUME_CODE_SCRIPT = new DefaultRedisScript<>("""
+            local current = redis.call('GET', KEYS[1])
+            if not current then
+                return -1
+            end
+            if current == ARGV[1] then
+                redis.call('DEL', KEYS[1])
+                redis.call('DEL', KEYS[2])
+                return 1
+            end
+            local attempts = redis.call('INCR', KEYS[2])
+            if attempts == 1 then
+                redis.call('PEXPIRE', KEYS[2], ARGV[3])
+            end
+            if attempts >= tonumber(ARGV[2]) then
+                redis.call('DEL', KEYS[1])
+                redis.call('DEL', KEYS[2])
+                return -2
+            end
+            return 0
+            """, Long.class);
 
     @Autowired
     private UserMapper userMapper;
@@ -64,13 +94,12 @@ public class AuthServiceImpl implements AuthService {
             user = userMapper.selectByEmail(identifier.toLowerCase());
         }
         if (user == null) {
-            throw new RuntimeException("用户名或密码错误");
+            passwordEncoder.matches(loginDto.getPassword(), DUMMY_PASSWORD_HASH);
+            throw AuthRequestException.unauthorized("用户名或密码错误");
         }
-        if (Integer.valueOf(0).equals(user.getAccountStatus())) {
-            throw new RuntimeException("账号已被封禁，请联系管理员");
-        }
-        if (!passwordEncoder.matches(loginDto.getPassword(), user.getPasswordHash())) {
-            throw new RuntimeException("用户名或密码错误");
+        boolean passwordMatches = passwordEncoder.matches(loginDto.getPassword(), user.getPasswordHash());
+        if (!passwordMatches || Integer.valueOf(0).equals(user.getAccountStatus())) {
+            throw AuthRequestException.unauthorized("用户名或密码错误");
         }
 
         user.setLastLogin(LocalDateTime.now());
@@ -81,14 +110,13 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void register(RegisterDto registerDto) {
         String email = normalizeEmail(registerDto.getEmail());
-        verifyEmailCode("register", email, registerDto.getCode());
+        consumeEmailCode("register", email, registerDto.getCode());
         if (userMapper.selectByEmail(email) != null) {
-            throw new RuntimeException("该邮箱已注册");
+            throw AuthRequestException.badRequest("注册失败，请检查信息后重试");
         }
 
         User user = buildNewEmailUser(email, registerDto.getPassword().trim());
         userMapper.insert(user);
-        stringRedisTemplate.delete(codeKey("register", email));
     }
 
     @Override
@@ -97,57 +125,53 @@ public class AuthServiceImpl implements AuthService {
         String type = dto.getType();
         String ip = normalizeIp(clientIp);
 
-        if ("register".equals(type) && userMapper.selectByEmail(email) != null) {
-            throw new RuntimeException("该邮箱已注册");
-        }
-        if ("login".equals(type) && userMapper.selectByEmail(email) == null) {
-            throw new RuntimeException("该邮箱尚未注册");
-        }
-        if ("reset_pwd".equals(type) && userMapper.selectByEmail(email) == null) {
-            throw new RuntimeException("该邮箱尚未注册");
-        }
-
         enforceSendRateLimit(email, type, ip);
-        String code = RandomUtil.randomNumbers(6);
+        // Always follow the same delivery path. Account eligibility is checked only
+        // after the recipient proves mailbox ownership with the one-time code.
+        String code = String.format(Locale.ROOT, "%06d", SECURE_RANDOM.nextInt(1_000_000));
+        stringRedisTemplate.delete(attemptKey(type, email));
         stringRedisTemplate.opsForValue().set(codeKey(type, email), code, CODE_TTL);
-        sendCodeEmail(email, type, code);
+        try {
+            sendCodeEmail(email, type, code);
+        } catch (RuntimeException ex) {
+            stringRedisTemplate.delete(List.of(codeKey(type, email), attemptKey(type, email)));
+            throw ex;
+        }
     }
 
     @Override
     public Map<String, Object> loginByEmailCode(EmailCodeLoginDto dto) {
         String email = normalizeEmail(dto.getEmail());
-        verifyEmailCode("login", email, dto.getCode());
+        consumeEmailCode("login", email, dto.getCode());
 
         User user = userMapper.selectByEmail(email);
         if (user == null) {
-            throw new RuntimeException("该邮箱尚未注册");
+            throw AuthRequestException.unauthorized("登录失败，请检查验证码后重试");
         }
         if (Integer.valueOf(0).equals(user.getAccountStatus())) {
-            throw new RuntimeException("账号已被封禁，请联系管理员");
+            throw AuthRequestException.unauthorized("登录失败，请检查验证码后重试");
         }
 
         user.setLastLogin(LocalDateTime.now());
         userMapper.updateById(user);
-        stringRedisTemplate.delete(codeKey("login", email));
         return buildLoginResponse(user, false);
     }
 
     @Override
     public void resetPassword(ResetPasswordDto dto) {
         String email = normalizeEmail(dto.getEmail());
-        verifyEmailCode("reset_pwd", email, dto.getCode());
+        consumeEmailCode("reset_pwd", email, dto.getCode());
 
         User user = userMapper.selectByEmail(email);
         if (user == null) {
-            throw new RuntimeException("该邮箱尚未注册");
+            throw AuthRequestException.badRequest("密码重置失败，请检查信息后重试");
         }
         if (Integer.valueOf(0).equals(user.getAccountStatus())) {
-            throw new RuntimeException("账号已被封禁，请联系管理员");
+            throw AuthRequestException.badRequest("密码重置失败，请检查信息后重试");
         }
 
         user.setPasswordHash(passwordEncoder.encode(dto.getNewPassword()));
         userMapper.updateById(user);
-        stringRedisTemplate.delete(codeKey("reset_pwd", email));
     }
 
     private void enforceSendRateLimit(String email, String type, String ip) {
@@ -158,10 +182,10 @@ public class AuthServiceImpl implements AuthService {
         String ipDailyCountKey = "email_code:count:ip:" + type + ":" + day + ":" + ip;
 
         if (Boolean.FALSE.equals(stringRedisTemplate.opsForValue().setIfAbsent(cooldownEmailKey, "1", SEND_COOLDOWN))) {
-            throw new IllegalStateException("同一邮箱发送过于频繁，请1分钟后再试");
+            throw AuthRequestException.rateLimited();
         }
         if (Boolean.FALSE.equals(stringRedisTemplate.opsForValue().setIfAbsent(cooldownIpKey, "1", SEND_COOLDOWN))) {
-            throw new IllegalStateException("同一IP发送过于频繁，请1分钟后再试");
+            throw AuthRequestException.rateLimited();
         }
 
         Long emailCount = stringRedisTemplate.opsForValue().increment(emailDailyCountKey);
@@ -175,17 +199,28 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (emailCount != null && emailCount > DAILY_LIMIT) {
-            throw new IllegalStateException("同一邮箱24小时内发送次数已达上限");
+            throw AuthRequestException.rateLimited();
         }
         if (ipCount != null && ipCount > DAILY_LIMIT) {
-            throw new IllegalStateException("同一IP24小时内发送次数已达上限");
+            throw AuthRequestException.rateLimited();
         }
     }
 
-    private void verifyEmailCode(String type, String email, String code) {
-        String cachedCode = stringRedisTemplate.opsForValue().get(codeKey(type, email));
-        if (!StringUtils.hasText(cachedCode) || !cachedCode.equals(code)) {
-            throw new RuntimeException("验证码错误或已过期");
+    private void consumeEmailCode(String type, String email, String code) {
+        Long result = stringRedisTemplate.execute(
+                CONSUME_CODE_SCRIPT,
+                List.of(codeKey(type, email), attemptKey(type, email)),
+                code,
+                Integer.toString(MAX_CODE_VERIFY_ATTEMPTS),
+                Long.toString(CODE_TTL.toMillis()));
+        if (!Long.valueOf(1L).equals(result)) {
+            if ("login".equals(type)) {
+                throw AuthRequestException.unauthorized("登录失败，请检查验证码后重试");
+            }
+            if ("register".equals(type)) {
+                throw AuthRequestException.badRequest("注册失败，请检查信息后重试");
+            }
+            throw AuthRequestException.badRequest("密码重置失败，请检查信息后重试");
         }
     }
 
@@ -234,10 +269,11 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private String codeKey(String type, String email) {
-        if ("register".equals(type)) {
-            return "register_code:" + email;
-        }
-        return ("login".equals(type) ? "login_code:" : "reset_pwd_code:") + email;
+        return "email_code:{" + type + ":" + email + "}:value";
+    }
+
+    private String attemptKey(String type, String email) {
+        return "email_code:{" + type + ":" + email + "}:attempts";
     }
 
     private String normalizeEmail(String email) {
@@ -250,7 +286,7 @@ public class AuthServiceImpl implements AuthService {
 
     private Map<String, Object> buildLoginResponse(User user, boolean isNewUser) {
         User effectiveUser = membershipAccessService.ensureMembershipActive(user);
-        String token = jwtUtil.generateToken(user.getId().toString());
+        String token = jwtUtil.generateToken(effectiveUser);
         Map<String, Object> responseData = new HashMap<>();
         Map<String, Object> userInfo = new HashMap<>();
         userInfo.put("id", effectiveUser.getId());

@@ -1,14 +1,19 @@
 package com.offerwave.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.offerwave.entity.Job;
 import com.offerwave.entity.User;
 import com.offerwave.mapper.JobMapper;
 import com.offerwave.mapper.UserJobStatusMapper;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -20,11 +25,19 @@ import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class JobServiceImplTest {
+
+    @BeforeAll
+    static void initializeMybatisMetadata() {
+        TableInfoHelper.initTableInfo(
+                new MapperBuilderAssistant(new MybatisConfiguration(), "test"), Job.class);
+    }
 
     @Mock
     private JobMapper jobMapper;
@@ -44,56 +57,63 @@ class JobServiceImplTest {
     }
 
     @Test
-    void shouldUseJobIdsForFirstThirtyJobs() {
+    void shouldSelectNewestWindowBeforeApplyingCompanyDiversity() {
         mockAuthenticatedMember();
-        List<Job> priorityWindowJobs = buildAscendingJobs(1, 30);
+        List<Job> sortedWindow = List.of(
+                buildJob(100, "Acme"),
+                buildJob(99, "Acme"),
+                buildJob(98, "Beta"),
+                buildJob(97, "Acme"),
+                buildJob(96, "Gamma"));
 
         when(jobMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(100L);
-        when(jobMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(priorityWindowJobs);
+        when(jobMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(sortedWindow);
 
-        Page<Job> result = jobService.searchJobs(new Page<>(1, 20), null, null, null,
+        Page<Job> result = jobService.searchJobs(new Page<>(1, 5), null, null, null,
                 null, null, null, "newest");
 
-        assertEquals(List.of(1L, 2L, 3L, 4L, 5L), extractIds(result, 5));
-        assertEquals(20, result.getRecords().size());
+        assertEquals(List.of(100L, 98L, 96L, 99L, 97L), extractIds(result, 5));
+        assertEquals(5, result.getRecords().size());
         assertEquals(100L, result.getTotal());
+
+        ArgumentCaptor<LambdaQueryWrapper<Job>> wrapperCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(jobMapper).selectList(wrapperCaptor.capture());
+        String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
+        assertTrue(sqlSegment.contains("updated_at DESC"), sqlSegment);
+        assertTrue(sqlSegment.contains("LIMIT 30"), sqlSegment);
     }
 
     @Test
-    void shouldFillBeyondFirstThirtyWithRegularSortedJobsWithoutDuplicates() {
-        mockAuthenticatedMember();
-        List<Job> priorityWindowJobs = buildAscendingJobs(1, 30);
-        List<Job> regularJobs = buildJobs(60, 51);
+    void shouldLimitAnonymousUsersToThirtyJobsFromRequestedSort() {
+        List<Job> sortedWindow = buildJobs(60, 31);
 
-        when(jobMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(60L);
-        when(jobMapper.selectList(any(LambdaQueryWrapper.class)))
-                .thenReturn(priorityWindowJobs)
-                .thenReturn(regularJobs);
+        when(jobMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(100L);
+        when(jobMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(sortedWindow);
 
-        Page<Job> result = jobService.searchJobs(new Page<>(2, 20), null, null, null,
-                null, null, null, "newest");
+        Page<Job> result = jobService.searchJobs(new Page<>(1, 30), null, null, null,
+                null, null, null, "salary_desc");
 
-        assertEquals(List.of(21L, 22L, 23L, 24L, 25L, 26L, 27L, 28L, 29L, 30L), extractIds(result, 10));
-        assertEquals(List.of(60L, 59L, 58L, 57L, 56L, 55L, 54L, 53L, 52L, 51L), extractIds(result, 10, 20));
-        assertEquals(20, result.getRecords().size());
-        assertEquals(60L, result.getTotal());
+        assertEquals(List.of(60L, 59L, 58L, 57L, 56L), extractIds(result, 5));
+        assertEquals(30, result.getRecords().size());
+        assertEquals(30L, result.getTotal());
+
+        ArgumentCaptor<LambdaQueryWrapper<Job>> wrapperCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(jobMapper).selectList(wrapperCaptor.capture());
+        String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
+        assertTrue(sqlSegment.contains("salary_max DESC"), sqlSegment);
+    }
+
+    private Job buildJob(long id, String companyName) {
+        Job job = new Job();
+        job.setId(id);
+        job.setCompanyName(companyName);
+        job.setAuditStatus(1);
+        return job;
     }
 
     private List<Job> buildJobs(long startInclusive, long endInclusive) {
         return LongStream.iterate(startInclusive, id -> id - 1)
                 .limit(startInclusive - endInclusive + 1)
-                .mapToObj(id -> {
-                    Job job = new Job();
-                    job.setId(id);
-                    job.setCompanyName("Company-" + id);
-                    job.setAuditStatus(1);
-                    return job;
-                })
-                .collect(Collectors.toList());
-    }
-
-    private List<Job> buildAscendingJobs(long startInclusive, long endInclusive) {
-        return LongStream.rangeClosed(startInclusive, endInclusive)
                 .mapToObj(id -> {
                     Job job = new Job();
                     job.setId(id);

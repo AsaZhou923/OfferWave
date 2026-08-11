@@ -1,857 +1,333 @@
-# OfferWave平台 API 接口文档
+# OfferWave 平台 API 接口文档
 
-**文档版本**：V1.1.2
+- 文档版本：V1.2.0
+- 最后更新：2026-08-11
+- 状态：与当前实现同步
+- Base URL：`https://api.offerwave.com/api/v1`
 
-**最后更新**：2026-03-17
+运行时字段模型以 `/v3/api-docs` 和 `/doc.html` 为准；本文固定跨模块的鉴权、状态码、分页、职位身份和爬虫契约。
 
-**状态**：接口草案
+## 1. 全局契约
 
----
+### 1.1 鉴权
 
-## 1. 全局说明 (Global Standards)
+需要登录的请求只接受：
 
-### 1.1 基础路径
+```http
+Authorization: Bearer <jwt>
+```
 
-* **Base URL**: `https://api.offerwave.com/api/v1`
-* **协议**: HTTPS
+Bearer scheme 大小写不敏感，但 Header 中必须同时包含 scheme 和 Token。以下旧方式已经删除并按未认证处理：
 
-### 1.2 鉴权方式 (Authentication)
+- `?token=...`
+- `Cookie: token=...`
+- `token: ...`
+- `X-ACCESS-TOKEN: ...`
+- `Authorization: <裸 token>`
+- 爬虫 `X-API-KEY`
 
-除“登录注册”和“公开职位模块”接口外，所有接口均需在 HTTP Header 中携带 Token。
-* **Header Key**: `Authorization`
-* **Header Value**: `Bearer <token_string>`
-* **兼容写法**:
-  * `Authorization: Bearer <token_string>` (推荐)
-  * `Authorization: bearer <token_string>` (Bearer 大小写不敏感)
-  * `Authorization: <token_string>` (兼容)
-  * `token: <token_string>` (兼容旧客户端)
+权限分层：
 
-### 1.3 统一响应格式 (Response Format)
+| 范围 | 权限 |
+|---|---|
+| `/auth/**`、`/jobs/**`、公开资料与会员列表 | 公开 |
+| `/user/**`、用户资料下载 | 登录用户 |
+| `/admin/**`、`/internal/crawler/**` | `role=1` 管理员 |
 
-系统采用标准 JSON 格式响应，包含状态码、消息提示和业务数据。
+密码修改后，原 JWT 因凭据版本不再匹配而失效。
 
-#### 成功响应示例 (HTTP 200)
+### 1.2 响应与 HTTP 状态
+
+统一响应体：
 
 ```json
 {
   "code": 200,
   "message": "success",
-  "data": {
+  "data": {},
+  "map": {}
+}
+```
+
+`code` 与真实 HTTP 状态保持一致。常见状态为 `200`、`400`、`401`、`403`、`404`、`429`、`500`。服务端异常只返回固定的 `服务器内部错误`，不会把数据库、Redis、SMTP、JWT 或堆栈文本回显给客户端。
+
+### 1.3 分页
+
+所有 `/api/**` 的分页参数统一约束：
+
+- `page >= 1`
+- `1 <= size <= 100`
+- 不合法时返回 HTTP `400`
+
+### 1.4 跨域
+
+浏览器 Origin 必须命中部署变量 `OFFERWAVE_CORS_ALLOWED_ORIGINS` 中的精确白名单。服务不允许通配 Origin，也不开放凭据化 CORS。
+
+## 2. 接口目录
+
+### 2.1 公开接口
+
+| Method | Path | 用途 |
+|---|---|---|
+| `POST` | `/auth/send-email-code` | 发送注册、登录或重置密码验证码 |
+| `POST` | `/auth/register` | 邮箱 + 验证码 + 密码注册 |
+| `POST` | `/auth/login` | 用户名/邮箱 + 密码登录 |
+| `POST` | `/auth/login/email` | 已注册邮箱 + 验证码登录 |
+| `POST` | `/auth/password/reset` | 邮箱验证码重置密码 |
+| `GET` | `/jobs` | 职位搜索、筛选和排序 |
+| `GET` | `/jobs/total` | 已上线职位总数 |
+| `GET` | `/jobs/{id}` | 职位详情；登录时附带个人状态 |
+| `GET` | `/memberships` | 会员等级列表 |
+| `GET` | `/material-categories/sections` | 资料分类与内容 |
+| `GET` | `/material-packages` | 资料包列表 |
+| `GET` | `/material-packages/{id}` | 资料包详情 |
+
+### 2.2 登录用户接口
+
+| Method | Path | 用途 |
+|---|---|---|
+| `GET` | `/user/me` | 当前用户、偏好、会员与统计 |
+| `PUT` | `/user/preferences` | 更新求职偏好 |
+| `POST` | `/user/jobs/{job_id}/status` | 收藏、投递状态和备注 |
+| `GET` | `/user/my-jobs` | 我的收藏/投递列表 |
+| `GET` | `/user/material-packages/{id}/downloads` | 获取有权限的下载项 |
+
+普通用户自助升级接口 `/user/membership/upgrade` 已从生产代码删除；调用返回 `404`。会员调整只能由管理员接口或未来经过验证的支付流程执行。
+
+### 2.3 管理员接口
+
+以下接口均要求管理员 JWT：
+
+| Method | Path | 用途 |
+|---|---|---|
+| `GET` | `/admin/jobs/pending-audit` | 待审核职位 |
+| `POST` | `/admin/jobs/audit` | 批量审核职位 |
+| `DELETE` | `/admin/jobs` | 批量删除职位 |
+| `GET` | `/admin/jobs` | 全量职位库 |
+| `POST` | `/admin/jobs` | 新建职位 |
+| `POST` | `/admin/jobs/batch` | 批量新建职位 |
+| `POST` | `/admin/jobs/import-file` | 导入 Excel/CSV |
+| `PUT` | `/admin/jobs/{id}` | 更新职位 |
+| `POST` | `/admin/jobs/company-stage` | 批量更新公司招聘阶段 |
+| `POST` | `/admin/jobs/cleanup-expired` | 清理过期职位 |
+| `GET` | `/admin/crawler/sync-logs` | 爬虫同步日志 |
+| `GET` | `/admin/crawler/error-items` | 爬虫异常条目 |
+| `GET` | `/admin/users` | 用户列表；不返回任何密码哈希 |
+| `PUT` | `/admin/users/{id}/status` | 封禁/解封用户 |
+| `PUT` | `/admin/users/{id}/benefits` | 调整会员与追踪额度 |
+| `GET` | `/admin/moderation/sensitive-words` | 敏感词列表 |
+| `POST` | `/admin/moderation/sensitive-words` | 新增敏感词 |
+| `PUT` | `/admin/moderation/sensitive-words/{id}/status` | 启停敏感词 |
+| `DELETE` | `/admin/moderation/sensitive-words/{id}` | 删除敏感词 |
+| `GET` | `/admin/moderation/audit-logs` | 内容审核日志 |
+| `GET` | `/admin/memberships` | 会员配置 |
+| `PUT` | `/admin/memberships/{id}` | 更新会员配置 |
+| `GET` | `/admin/configs` | 运营配置 |
+| `POST` | `/admin/configs` | 新增/更新运营配置 |
+| `GET` | `/admin/material-categories` | 资料分类管理 |
+| `POST` | `/admin/material-categories` | 新建资料分类 |
+| `PUT` | `/admin/material-categories/{id}` | 更新资料分类 |
+| `GET` | `/admin/material-packages` | 资料包管理列表 |
+| `GET` | `/admin/material-packages/{id}` | 资料包管理详情 |
+| `POST` | `/admin/material-packages` | 新建资料包 |
+| `PUT` | `/admin/material-packages/{id}` | 更新资料包 |
+| `POST` | `/admin/material-packages/images` | 上传资料图片 |
+
+## 3. 认证接口
+
+### 3.1 发送验证码
+
+`POST /auth/send-email-code`
+
+```json
+{
+  "email": "user@example.com",
+  "type": "register"
+}
+```
+
+`type` 仅允许 `register`、`login`、`reset_pwd`。无论邮箱是否存在，成功受理时均返回相同的外部消息，避免账号枚举。验证码有效期 5 分钟；同邮箱和来源 IP 每种用途 1 分钟最多发送一次、24 小时最多 10 次。
+
+### 3.2 注册
+
+`POST /auth/register`
+
+```json
+{
+  "email": "user@example.com",
+  "code": "123456",
+  "password": "at-least-6-characters"
+}
+```
+
+验证码必须来自 `register` 场景。注册成功返回 HTTP `200`；重复或校验失败返回固定的 HTTP `400` 消息。
+
+### 3.3 密码登录
+
+`POST /auth/login`
+
+```json
+{
+  "username": "username-or-email",
+  "password": "secret"
+}
+```
+
+成功响应的 `data`：
+
+```json
+{
+  "token": "<jwt>",
+  "user": {
     "id": 1001,
-    "nickname": "用户名称"
-  }
+    "nickname": "User_xxxxxx",
+    "role": 0,
+    "is_admin": false,
+    "membership_level": 1,
+    "is_vip": false,
+    "email": "user@example.com"
+  },
+  "is_new_user": false
 }
 ```
 
-#### 失败响应示例 (HTTP 4xx/5xx)
+未知账号与错误密码都返回相同的 HTTP `401` 消息。
+
+### 3.4 邮箱验证码登录
+
+`POST /auth/login/email`
 
 ```json
 {
-  "code": 401,
-  "message": "Token已过期，请重新登录",
-  "data": null
+  "email": "user@example.com",
+  "code": "123456"
 }
 ```
 
-#### 1.4 常用业务状态码
+仅支持已经注册且未被封禁的邮箱，不会自动创建账号。
 
-| 状态码 (code) | 说明                                            |
-| ------------- | ----------------------------------------------- |
-| 200           | 请求成功                                        |
-| 400           | 参数错误 (Bad Request)                          |
-| 401           | 未授权 (Unauthorized)                           |
-| 403           | 权限不足 (Forbidden) - 如非会员尝试使用会员功能 |
-| 404           | 资源不存在 (Not Found)                          |
-| 500           | 服务器内部错误 (Internal Server Error)          |
+### 3.5 重置密码
 
-## 2. 接口目录 (Table of Contents)
-
-* **3. 认证模块 (Auth)**
-
-  * 3.1 [POST] 用户注册 `/auth/register`
-  * 3.2 [POST] 用户名密码登录 `/auth/login`
-
-* 4. **用户与会员模块 (User & Membership)**
-
-  * 4.1 [GET] 获取个人信息与权益 `/user/me`
-  * 4.2 [PUT] 更新求职偏好 `/user/preferences`
-  * 4.3 [GET] 获取会员等级列表 `/memberships`
-  * 4.4 [POST] 模拟购买会员 `/user/membership/upgrade`
-
-* 5. **职位查询模块 (Jobs - Public)**
-
-  * 5.1 [GET] 获取职位列表 (搜索/筛选) `/jobs`
-  * 5.2 [GET] 获取公开职位总数 `/jobs/total`
-  * 5.3 [GET] 获取职位详情 `/jobs/{id}`
-
-* 6. **投递追踪模块 (Tracking)**
-
-  * 6.1 [POST] 更新职位状态 (收藏/投递) `/user/jobs/{job_id}/status`
-  * 6.2 [GET] 获取我的职位列表 (收藏/已投) `/user/my-jobs`
-
-* 7. **爬虫数据接入模块 (Crawler - Internal)**
-
-  * 7.1 [POST] 批量上传招聘数据 `/internal/crawler/sync`
-
-## 3. 认证模块 (Authentication)
-
-本模块处理用户的注册和登录流程
-
-### 3.1 用户注册
-
-- **URL**: `/auth/register`
-- **Method**: `POST`
-- **描述**: 创建一个新用户账号
-- **权限**: 公开 (Public)
-
-#### 请求参数 (Request Body)
-
-| **参数名**   | **类型** | **必填** | **说明**                                        |
-| ------------ | -------- | -------- | ----------------------------------------------- |
-| **username** | string   | **是** | 登录账号 (4-50位，可以是手机号/邮箱/自定义字符) |
-| **password** | string   | **是** | 登录密码 (至少6位)                              |
-
-#### 成功响应 (HTTP 200)
-
-```JSON
-{
-  "code": 200,
-  "message": "注册成功",
-  "data": null
-}
-```
-
-#### 失败响应
-
-- **400 Bad Request**: 
-  - `{"code": 400, "message": "注册失败: 用户名已存在"}`
-  - `{"code": 400, "message": "用户名长度必须在40个字符之}`
-  - `{"code": 400, "message": "密码长度至少}`
-
----
-
-### 3.2 用户名密码登录
-
-- **URL**: `/auth/login`
-- **Method**: `POST`
-- **描述**: 用户通过账号和密码登录，换取用于后续请求的 JWT Token。
-- **权限**: 公开 (Public)
-
-#### 请求参数 (Request Body)
-
-| **参数名**   | **类型** | **必填** | **说明** |
-| ------------ | -------- | -------- | -------- |
-| **username** | string   | **是** | 登录账号 |
-| **password** | string   | **是** | 登录密码 |
-
-#### 成功响应 (HTTP 200)
-
-```JSON
-{
-  "code": 200,
-  "message": "登录成功",
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...", // 核心鉴权 Token
-    "user": {
-      "id": 1001,
-      "nickname": "User_1a2b3c", 
-      "avatar": null, 
-      "membership_level": 1,
-      "is_vip": false
-    },
-    "is_new_user": false 
-  }
-}
-```
-
-#### 失败响应
-
-- **401 Unauthorized**: `{"code": 401, "message": "登录失败: 用户名或密码错误"}`
-
----
-
-## 4. 用户与会员模块 (User & Membership)
-
-此模块管理用户画像、偏好设置及会员权益
-
-### 4.1 获取个人信息 (含权
-
-* **URL:** `/user/me`
-* **Method:** `GET`
-
-* **描述:** 获取当前登录用户的详细信息，包括求职偏好、会员权益详情以及统计数据
-
-* **权限:** 需登录
-
-**请求参数**
-
-
-
-**成功响应 (HTTP 200)**
+`POST /auth/password/reset`
 
 ```json
 {
-  "code": 200,
-  "message": "success",
-  "data": {
-    "id": 1001,
-    "email": "zhangsan@example.com",
-    "nickname": "张三",
-    "avatar": "[https://example.com/avatar.jpg](https://example.com/avatar.jpg)",
-    "preferences": {
-      "industry": ["互联, "金融"], // 解析pref_industry (JSON/CSV)
-      "city": "北京",
-      "job": "后端开
-    },
-    "membership": {
-      "id": 1,
-      "level_name": "普通用,
-      "expire_date": null, // null 表示永久有效
-      "privileges": {      // 解析memberships.privileges
-        "max_track_count": 10,
-        "can_view_analysis": false,
-        "refresh_limit": 5
-      }
-    },
-    "stats": {
-      "tracked_count": 8,   // 当前已追收藏的职位数 (用于前端判断是否超限)
-      "delivered_count": 2  // 已投递数
-    }
-  }
+  "email": "user@example.com",
+  "code": "123456",
+  "newPassword": "new-secret"
 }
 ```
 
-### 4.2 更新求职偏好
+验证码最多允许 5 次错误尝试，并通过 Redis 脚本原子校验、计数与单次消费。密码更新后，旧 JWT 自动失效。
 
-* **URL:** `/user/preferences`
+## 4. 职位查询与追踪
 
-* **Method:** `PUT`
+### 4.1 职位列表
 
-* **描述:** 更新用户的求职意向，用于首页推荐算法
+`GET /jobs`
 
-* **权限:** 需登录
+| Query | 类型 | 说明 |
+|---|---|---|
+| `page` | int | 默认 1 |
+| `size` | int | 默认 20，最大 100 |
+| `keyword` | string | 公司名或职位名模糊匹配 |
+| `city` | string | 城市模糊匹配 |
+| `industry` | string | 行业模糊匹配 |
+| `recruit_type` | string | 招聘类型精确匹配 |
+| `salary_min` | int | 最低薪资下限 |
+| `education` | string | 学历要求 |
+| `sort` | string | `newest`（默认）、`deadline`、`salary_desc` |
 
-**请求参数 (Request Body)**
+排序先按用户选择生成候选窗口，再在前 30 条内按公司轮询提高多样性。游客和普通会员最多查看该排序结果的前 30 条；VIP 可以继续分页查看全部结果。不会再按最小 ID 返回最旧数据。
 
-| 参数       | 类型   | 必填 | 说明                          |
-| :------------ | :----- | :--- | :---------------------------- |
-| pref_industry | string |   | "偏好行业 ("互联教育")" |
-| pref_city     | string |   | "偏好城市 ("上海")"        |
-| pref_job      | string |   | "偏好岗位 ("Java开)"    |
+### 4.2 更新追踪状态
 
-**成功响应 (HTTP 200)**
+`POST /user/jobs/{job_id}/status`
 
-```JSON
+```json
 {
-  "code": 200,
-  "message": "偏好设置已更,
-  "data": true
+  "isCollected": true,
+  "deliveryStatus": 1,
+  "userNote": "已投递，等待通知"
 }
 ```
 
-### 4.3 获取会员等级列表
+- `deliveryStatus`：`0` 未投递、`1` 已投递、`2` 笔试中、`3` 面试中、`4` 已录用、`5` 流程结束；
+- `userNote` 最多 200 字；
+- 普通用户额度检查在事务中锁定用户记录；会员配置缺失时 fail closed。
 
-* **URL:** `/memberships`
+### 4.3 我的职位
 
-* **Method:** `GET`
+`GET /user/my-jobs?type=collected&page=1&size=20`
 
-* **描述:** 获取所有可用的会员等级及其价格、权益，用于“会员购买”页面展示
-* **权限:** 需登录
+`type` 为 `collected` 或 `delivered`。
 
-**请求参数**
+## 5. 内部爬虫同步
 
+`POST /internal/crawler/sync`
 
-**成功响应 (HTTP 200)**
+只允许管理员 JWT，不接受 API Key。
 
-```JSON
+```json
 {
-  "code": 200,
-  "message": "success",
-  "data": [
+  "batchId": "crawl_20260811_01",
+  "items": [
     {
-      "id": 1,
-      "level_name": "普通用,
-      "price": 0.00,
-      "desc": "基础功能，限制追10 个职
-    },
-    {
-      "id": 2,
-      "level_name": "VIP会员",
-      "price": 9.90,
-      "desc": "无限追踪，解锁竞争力分析报告",
-      "tag": "推荐"
+      "companyName": "Acme",
+      "companyType": "民企",
+      "companyBusiness": "互联网",
+      "jobTitle": "Java Developer",
+      "city": "Tokyo",
+      "recruitType": "社招",
+      "education": "本科",
+      "salaryRange": "20k-30k",
+      "salaryMin": 20000,
+      "salaryMax": 30000,
+      "applyLink": "https://example.com/jobs/1",
+      "deadline": "2026-09-30",
+      "processStage": "网申开启",
+      "sourceOrigin": "crawler"
     }
   ]
 }
 ```
 
-### 4.4 模拟购买/升级会员 (MVP)
+单条必填字段为 `companyName`、`companyType`、`jobTitle`、`city`、`recruitType`；`batchId` 必填且不超过 100 字符。`uniqueHash` 是兼容性字段，只作为提示，服务端始终重新计算并拥有最终职位身份。
 
-* **URL:** `/user/membership/upgrade`
+服务端规范算法：
 
-* **Method:** `POST`
-
-* **描述:** 开发测试专用接口。将当前用户直接升级为指定等级
-
-* **权限:** 需登录
-
-**请求参数 (Request Body)**
-
-| 参数                 | 类型 | 必填 | 说明                        |
-| :---------------------- | :--- | :--- | :-------------------------- |
-| target_level_id         | int  |   | 目标等级 ID (2 代表 VIP) |
-
-**成功响应 (HTTP 200)**
-
-```JSON
-{
-  "code": 200,
-  "message": "升级成功",
-  "data": {
-    "current_level": "VIP会员",
-    "expire_date": "2026-03-20"
-  }
-}
+```text
+MD5(UTF-8(lower(trim(companyName)) + "|" + lower(trim(jobTitle)) + "|" + lower(trim(city))))
 ```
 
-## 5. 职位查询模块 (Jobs - Public)
-
-
-此模块提供职位的检索、筛选和详情展示
-**注意**：此模块接口**无需鉴权**即可访问，但如果 Request Header 中带有 Token，后端会在返回详情时附加“我的投递状态”。
-
-### 5.1 获取职位列表 (搜索/筛选)
-
-* **URL**: `/jobs`
-* **Method**: `GET`
-* **描述**: 首页表格视图的数据源。支持多维度组合筛选和模糊搜索
-* **权限**: 公开 (Public)
-
-#### 请求参数 (Query Params)
-
-| 参数          | 类型   | 必填 | 说明                                                |
-| :--------------- | :----- | :--- | :-------------------------------------------------- |
-| **page**         | int    | 否 | 页码 (默认 1)                                      |
-| **size**         | int    | 否 | 每页数量 (默认 20)                                 |
-| **keyword**      | string | 否 | 搜索关键词 (匹配公司名或岗位)                      |
-| **city**         | string | 否 | 城市筛选 (如"北京")                             |
-| **industry**     | string | 否 | 行业筛选 (如"互联网")                           |
-| **recruit_type** | string | 否 | 招聘类型 (春招/秋招/实习)                          |
-| **salary_min**   | int    | 否 | 最低薪资过滤 (如 15000)                            |
-| **education**    | string | 否 | 学历过滤 (如 本科)                                 |
-| **sort**         | string | 否 | 排序字段: `newest`(默认), `deadline`, `salary_desc` |
-
-#### 成功响应 (HTTP 200)
+成功响应：
 
 ```json
 {
   "code": 200,
   "message": "success",
   "data": {
-    "total": 150, // 总记录数
-    "current": 1, // 当前页
-    "size": 20,
-    "records": [
-      {
-        "id": 2048,
-        "company_name": "字节跳动",
-        "company_business": "互联网",
-        "industry": "互联网",
-        "job_title": "后端开发工程师",
-        "city": "北京",
-        "recruit_type": "春招",
-        "education": "本科",
-        "salary_range": "20k-40k", // 展示用文本
-        "deadline": "2026-03-31",  // 前端需比较此时间：< 7 天则显示红色
-        "process_stage": "网申开启",
-        "updated_at": "2026-02-18 10:00:00",
-        "is_urgent": true          // 后端计算字段: true 表示快截止
-      },
-      {
-        "id": 2049,
-        "company_name": "腾讯",
-        // ...
-      }
-    ]
-  }
+    "received_count": 1,
+    "inserted_count": 1,
+    "updated_count": 0,
+    "failed_count": 0
+  },
+  "map": {}
 }
 ```
 
-### 5.2 获取公开职位总数
+失败同步与非法条目的审计使用独立事务记录，不会随主写入事务一起回滚。
 
-- **URL**: `/jobs/total`
-- **Method**: `GET`
-- **描述**: 获取当前已审核上线职位总数，游客可访问。
-- **权限**: 公开 (Public)
+## 6. 兼容性与破坏性变更
 
-#### 成功响应 (HTTP 200)
+2026-08-11 安全整改包含以下有意的破坏性变更：
 
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {
-    "total_count": 1234
-  }
-}
-```
+- 所有旧 JWT 在部署新 `JWT_SECRET` 后失效；
+- 密码重置会撤销旧 JWT；
+- 部署前 Redis 中遗留的邮箱验证码不保证继续有效；
+- `/user/membership/upgrade` 已删除；
+- `X-API-KEY`、查询参数/Cookie/旧 Header Token 已删除；
+- 错误响应改用真实 HTTP 4xx/5xx；
+- 所有分页 `size` 上限为 100。
 
-### 5.3 获取职位详情
-
-- **URL**: `/jobs/{id}`
-- **Method**: `GET`
-- **描述**: 获取单条职位的完整信息。如果用户已登录，会同时返回用户对该职位的收藏/投递状态
-- **权限**: 公开 (Public)
-
-#### 请求参数
-
-| 参数| 位置 | 类型 | 必填 | 说明 |
-| :-- | :-- | :-- | :-- | :-- |
-| `id` | Path | long | | 职位 ID |
-| `Authorization` | Header | string | | 可选。传`Bearer <token>` 后，响应中会返回 `my_status`（包含收藏状态与投递状态）；未传时 `my_status` `null` |
-
-#### 返回参数说明（data
-| 参数| 类型 | 说明 |
-| :-- | :-- | :-- |
-| `id` | long | 职位 ID |
-| `company_name` | string | 公司名称 |
-| `job_title` | string | 岗位名称 |
-| `announcement` | string | 职位描述/公告信息 |
-| `apply_link` | string | 投递链|
-| `test_info` | string | 笔试或测评说|
-| `deadline` | string | 截止日期（`YYYY-MM-DD`|
-| `my_status` | object/null | 当前用户对该职位的个性化状态；未登录时为 `null` |
-| `my_status.is_collected` | boolean | 用户对该职位的收藏状态（`true`=已收藏，`false`=未收藏） |
-| `my_status.delivery_status` | int | 投递状态码（见“投递状态枚举”） |
-| `my_status.delivery_status_str` | string | 投递状态文|
-| `my_status.user_note` | string | 用户备注 |
-
-#### 成功响应 (HTTP 200)
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {
-    "id": 2048,
-    "company_name": "字节跳动",
-    "job_title": "后端开发工程师",
-    "announcement": "职位描述...", 
-    "apply_link": "[https://job.bytedance.com/](https://job.bytedance.com/)...", // 投递跳转链
-    "test_info": "需进行在线测评",
-    "deadline": "2026-03-31",
-    
-    // 用户个性化状态 (未登录时 null)
-    "my_status": {
-      "is_collected": true,
-      "delivery_status": 1, // 1:已投
-      "delivery_status_str": "已投,
-      "user_note": "面试定在周三"
-    }
-  }
-}
-```
-
-## 6. 投递追踪模块 (Tracking)
-
-此模块是用户个人中心的核心，用于管理求职进度。**权限**: 需登录 (Bearer Token)。
-
-### 6.1 更新职位状态 (收藏/投递)
-
-- **URL**: `/user/jobs/{job_id}/status`
-- **Method**: `POST`
-- **描述**: 用户手动标记某个职位的状态
-- **逻辑约束**:
-  1. 检查用户会员等级
-  2. 如果普通用户中 `is_collected=true` 或 `delivery_status > 0` 的总数已达到权益上限（10），则拒绝操作。
-
-#### 请求参数 (Request Body)
-
-| **参数名**          | **类型** | **必填** | **说明**                |
-| ------------------- | -------- | -------- | ----------------------- |
-| **is_collected**    | boolean  | 否      | 是否收藏                |
-| **delivery_status** | int      | 否      | 投递状态码 (见底部枚举) |
-| **user_note**       | string   | 否      | 用户备注 (最多100字)      |
-
-#### 成功响应 (HTTP 200)
-
-```json
-{
-  "code": 200,
-  "message": "状态已更新",
-  "data": null
-}
-```
-
-#### 失败响应 (HTTP 403 - 权益不足)
-
-```json
-{
-  "code": 403,
-  "message": "普通用户只能追10 个职位，请升VIP 解锁无限权益",
-  "data": {
-    "current_count": 10,
-    "limit": 10,
-    "upgrade_url": "/memberships" // 前端引导跳转
-  }
-}
-```
-
-### 6.2 获取我的职位列表
-
-- **URL**: `/user/my-jobs`
-- **Method**: `GET`
-- **描述**: 获取用户“收藏夹”或“投递进度表”的数据。
-- **权限**: 需登录
-
-#### 请求参数 (Query Params)
-
-| **参数名** | **类型** | **必填** | **说明**                                     |
-| ---------- | -------- | -------- | -------------------------------------------- |
-| **type**   | string   | 是      | `collected` (仅收藏) 或 `delivered` (已投递) |
-| **page**   | int      | 否      | 页码                                         |
-| **size**   | int      | 否      | 每页数量 (默认 20)                           |
-
-
-
-------
-
-### 附录：状态码枚举 (Enumerations)
-
-前端渲染时请参考以下映射：
-
-#### 投递状态 (delivery_status)
-
-| **值** | **含义**           | **建议颜色 (Element Plus)** |
-| ------ | ------------------ | --------------------------- |
-| **0**  | **未投递**         | Info (灰色)                 |
-| **1**  | **已投递**         | Primary (蓝色)              |
-| **2**  | **笔试中**         | Purple (紫色)               |
-| **3**  | **面试中**         | Warning (橙色)              |
-| **4**  | **已录用 (Offer)** | Success (绿色)            |
-| **5**  | **流程结束 (挂)**  | Danger (红色)             |
-
-
-
-## 7. 爬虫数据接入模块 (Crawler - Internal)
-
-此模块专供内部 Python 爬虫程序调用，用于批量上报抓取到的招聘数据。
-**鉴权**: 使用专用 API Key（在 Header 中传递，不使用用户 Token）。
-
-### 7.1 批量上报招聘数据
-
-* **URL**: `/internal/crawler/sync`
-* **Method**: `POST`
-* **描述**: 接收爬虫清洗后的结构化数据列表。后端根据 `unique_hash` 进行去重：若存在则更新 `updated_at` 和 `process_stage`，若不存在则插入新记录。
-* **Header**:
-  * `X-API-KEY`: `<your_secret_crawler_key>` (需在后端配置匹配)
-
-#### 请求参数 (Request Body)
-
-| 参数                | 类型   | 必填   | 说明                                       |
-| :--------------------- | :----- | :----- | :----------------------------------------- |
-| **batch_id**           | string | 是   | 批次号 (如 "crawl_20260218_01")            |
-| **items**              | array  | 是   | 职位数据列表 (建议单次不超过 100 条)        |
-| **unique_hash**      | string | **是** | **核心去重字段** (MD5: 公司岗位城市) |
-| **company_name**     | string | 是   | 公司名称                                   |
-| **company_type**     | string | 否   | 公司类型 (国企/外企/民企/上市公司)         |
-| **company_business** | string | 否   | 所属行业                                  |
-| **job_title**        | string | 是   | 岗位名称                                   |
-| **city**             | string | 是   | 工作地点                                   |
-| **recruit_type**     | string | 是   | 招聘类型 (春招/秋招/实习)                  |
-| **education**        | string | 否   | 学历要求                                   |
-| **salary_range**     | string | 否   | 薪资范围文本 ("15k-25k")                |
-| **salary_min**       | int    | 否   | 最低薪资 (数值，用于筛选)                  |
-| **salary_max**       | int    | 否   | 最高薪资 (数值)                            |
-| **apply_link**       | string | 是   | 投递链接                                  |
-| **deadline**         | string | 否   | 截止日期 (YYYY-MM-DD 或 "2026-03-31")      |
-| **process_stage**    | string | 否   | 招聘进度 (如 "网申开启", "笔试中")         |
-| **test_info**        | string | 否   | 笔试信息 (如 "需在线测评")                 |
-| **source_origin**    | string | 否   | 来源 (默认 "crawler")                      |
-
-#### 成功响应 (HTTP 200)
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {
-    "received_count": 50,
-    "inserted_count": 10, // 新增职位
-    "updated_count": 40   // 更新职位数 (hash已存在)
-  }
-}
-```
-
-失败响应 (HTTP 401/400)
-
-
-- **401 Unauthorized**: `{"code": 401, "message": "无效API Key"}`
-- **400 Bad Request**: `{"code": 400, "message": "items 列表不能为空"}`
-
-------
-
-### 附录：爬虫端去重逻辑 (Python 示例)
-
-建议爬虫在生成数据时，按如下逻辑计算 `unique_hash`
-
-```python
-import hashlib
-
-def generate_hash(company, title, city):
-    # 1. 拼接关键字段 (中间加分隔符防止粘连)
-    raw_str = f"{company}|{title}|{city}"
-    
-    # 2. 计算 MD5
-    m = hashlib.md5()
-    m.update(raw_str.encode('utf-8'))
-    
-    # 3. 返回 32 位小写 hex 字符串
-    return m.hexdigest()
-
-# 示例
-# generate_hash("字节跳动", "后端开发", "北京")
-# -> "7a9d2f6b1c3e4a5d8f9e0b1c2d3e4f5a"
-```
-
-------
-
-## 8. 数据库枚举参考 (Database Enums)
-
-后端存入数据库时，请参考以下状态码定义
-
-### 8.1 审核状态 (audit_status)
-
-| **值** | **含义**                     |
-| ------ | ---------------------------- |
-| **0**  | **待审核** (默认状态        |
-| **1**  | **已上线** (公开可见)        |
-| **2**  | **审核拒绝** (内容违规/重复) |
-
-### 8.2 会员等级 (membership_id)
-
-| **值** | **含义**            |
-| ------ | ------------------- |
-| **1**  | **普通用户** (免费) |
-| **2**  | **VIP会员** (付费)  |
-## 9. v1.1.0 更新说明026-02-28
-
-### 9.1 鉴权模型调整
-- `/api/v1/internal/crawler/sync` 已改为管理员 JWT 鉴权（`Authorization: Bearer <token>`）
-- 角色要求：`role=1`（系统管理员）
-- 不再使用 `X-API-KEY` 作为爬虫接口鉴权方式
-
-### 9.2 新增管理员模
-- 新增路由前缀：`/api/v1/admin/**`
-- 覆盖能力
-  - 招聘信息管理（待审列表、审核、职位全量管理、Excel/CSV 导入、批量进度更新、过期清理）
-  - 导入接口：`POST /api/v1/admin/jobs/import-file`
-  - 爬虫监控（同步日志、异常拦截列表）
-  - 用户与权益管理（用户列表、封禁/解封、手工权益发放）
-  - 内容审核（敏感词管理、审核日志）
-  - 系统配置（会员配置管理、运营配置管理）
-
-### 9.3 爬虫同步响应变更
-- `/internal/crawler/sync` 成功返回新增字段：`failed_count`
-
-### 9.4 登录与个人信息返回补充字段
-- 登录返回 `user` 中新增：`role`、`is_admin`
-- `/user/me` 返回中新增：`role`、`is_admin`
-
-## 10. v1.1.1 更新说明（2026-03-01）
-
-### 10.1 认证新增：邮箱验证码登录与忘记密码
-
-新增 3 个接口（均为公开接口，无需 JWT）：
-
-- `POST /auth/send-email-code`
-- `POST /auth/login/email`
-- `POST /auth/password/reset`
-
-### 10.2 [POST] 发送邮箱验证码 `/auth/send-email-code`
-
-- **用途**：发送登录验证码或重置密码验证码
-- **限流**：同邮箱/IP 1 分钟 1 次，24 小时最多 10 次
-
-#### Request Body
-
-| 参数| 类型 | 必填 | 说明 |
-| :-- | :-- | :-- | :-- |
-| `email` | string | 是 | 邮箱地址 |
-| `type` | string | 是 | 验证码类型：`login`（登录）或 `reset_pwd`（重置密码） |
-
-#### Success Response (HTTP 200)
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": "验证码发送成功"
-}
-```
-
-#### Error Response
-
-- `429`：触发限流
-- `400`：邮箱格式错误、类型错误、`reset_pwd` 下邮箱未注册
-
-### 10.3 [POST] 邮箱验证码登录 `/auth/login/email`
-
-- **用途**：邮箱 + 验证码登录
-- **策略**：若邮箱未注册，自动创建账号并登录（`is_new_user=true`）
-
-#### Request Body
-
-| 参数| 类型 | 必填 | 说明 |
-| :-- | :-- | :-- | :-- |
-| `email` | string | 是 | 邮箱地址 |
-| `code` | string | | 邮箱验证|
-| `password` | string | 条件必填 | 首次邮箱验证码登录（自动注册）必填，至少 6 位；已注册用户可不传 |
-
-#### Success Response (HTTP 200)
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {
-    "token": "<jwt_token>",
-    "user": {
-      "id": 1001,
-      "nickname": "User_xxxxxx",
-      "avatar": null,
-      "role": 0,
-      "is_admin": false,
-      "membership_level": 1,
-      "is_vip": false,
-      "email": "user@example.com"
-    },
-    "is_new_user": true
-  }
-}
-```
-
-#### Error Response
-
-- `401`：验证码错误/过期，或账号状态异
-- `401`：首次邮箱登录未传密码，或密码长度不足 6 位
-
-### 10.4 [POST] 重置密码 `/auth/password/reset`
-
-- **用途**：忘记密码场景下重置密码
-- **安全**：验证码校验通过后，使用 BCrypt 更新 `password_hash`，并销毁验证码
-
-#### Request Body
-
-| 参数| 类型 | 必填 | 说明 |
-| :-- | :-- | :-- | :-- |
-| `email` | string | 是 | 邮箱地址 |
-| `code` | string | | 邮箱验证|
-| `newPassword` | string | | 新密码，至少 6 |
-
-#### Success Response (HTTP 200)
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": "密码重置成功"
-}
-```
-
-#### Error Response
-
-- `400`：验证码错误/过期、邮箱未注册、参数不合法
-
-### 10.5 数据与配置变
-
-- `users` 新增 `email` 字段，并加唯一索引 `uk_email`
-- Redis 验证Key
-  - `login_code:{email}`
-  - `reset_pwd_code:{email}`
-- 验证TTL 分钟
-- 新增邮件配置（QQ SMTP）：
-  - `spring.mail.host=smtp.qq.com`
-  - `spring.mail.port=465`
-- `spring.mail.username=${MAIL_USERNAME}`
-- `offerwave.mail.from=${MAIL_FROM}`
-- `spring.mail.password=${MAIL_PASSWORD}`
-
-## 11. v1.1.2 更新说明（2026-03-17）
-
-### 11.1 管理员资料包模块新增图片上传接口
-
-- **URL**: `/admin/material-packages/images`
-- **Method**: `POST`
-- **Content-Type**: `multipart/form-data`
-- **描述**: 上传资料包封面图或正文预览图，后端将图片保存到服务器本地磁盘，并返回可直接写入 `coverImageUrl` / `previewImages` 的访问地址
-- **权限**: 需登录，且要求管理员角色（`Authorization: Bearer <token>`）
-- **表单字段**:
-  - `files`: 多文件上传字段，支持一次上传多张
-  - `file`: 单文件上传字段，兼容仅上传一张图的前端写法
-
-#### 请求示例
-
-```bash
-curl -X POST "https://api.offerwave.com/api/v1/admin/material-packages/images" \
-  -H "Authorization: Bearer <admin_token>" \
-  -F "files=@cover.png" \
-  -F "files=@detail-1.jpg"
-```
-
-#### 成功响应 (HTTP 200)
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": [
-    {
-      "originalName": "cover.png",
-      "fileName": "3d5d6d7e8f194dbdb0d3f7d6134185ab.png",
-      "url": "/uploads/materials/images/2026/03/17/3d5d6d7e8f194dbdb0d3f7d6134185ab.png",
-      "contentType": "image/png",
-      "size": 182344
-    },
-    {
-      "originalName": "detail-1.jpg",
-      "fileName": "76d1e1e8a5ef4d34b2fd5cba7dc9a9ac.jpg",
-      "url": "/uploads/materials/images/2026/03/17/76d1e1e8a5ef4d34b2fd5cba7dc9a9ac.jpg",
-      "contentType": "image/jpeg",
-      "size": 265901
-    }
-  ]
-}
-```
-
-#### 失败响应
-
-- **400 Bad Request**
-  - `{"code": 400, "message": "请至少上传一张图片"}`
-  - `{"code": 400, "message": "仅支持 jpg、jpeg、png、webp、gif 格式图片"}`
-  - `{"code": 400, "message": "上传文件必须是图片"}`
-  - `{"code": 400, "message": "图片大小不能超过 10MB"}`
-- **401 Unauthorized**: 未登录或 Token 无效
-- **403 Forbidden**: 非管理员账号访问后台接口
-- **500 Internal Server Error**: 图片保存失败
-
-### 11.2 前端接入说明
-
-- 上传成功后，请将返回结果中的 `url` 直接写入资料包管理接口中的 `coverImageUrl` 或 `previewImages`
-- 资料包新增接口：`POST /api/v1/admin/material-packages`
-- 资料包编辑接口：`PUT /api/v1/admin/material-packages/{id}`
-
-### 11.3 本地存储与部署约定
-
-- 图片默认保存到 `${user.dir}/storage/materials/images/...`
-- 默认公开访问前缀为 `/uploads/**`
-- 部署到服务器时，建议通过环境变量覆盖以下配置：
-- `OFFERWAVE_STORAGE_ROOT`
-- `OFFERWAVE_STORAGE_PUBLIC_URL_PREFIX`
-- `OFFERWAVE_MATERIAL_IMAGE_MAX_SIZE`
-- 服务器需保证上传目录具有读写权限，并在重启或重新发布时保留该目录
-
-
-
-
-
+客户端必须在发布前完成相应迁移。

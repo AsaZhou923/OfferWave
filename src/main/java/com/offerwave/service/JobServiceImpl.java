@@ -18,9 +18,13 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -41,7 +45,7 @@ public class JobServiceImpl implements JobService {
     private MembershipAccessService membershipAccessService;
 
     private static final int JOB_LIST_LIMIT = 30;
-    private static final int ID_PRIORITY_WINDOW_SIZE = 30;
+    private static final int DIVERSITY_WINDOW_SIZE = 30;
 
     private static final Map<Integer, String> DELIVERY_STATUS_MAP = Map.of(
             0, "未投递",
@@ -81,7 +85,8 @@ public class JobServiceImpl implements JobService {
 
         long offset = page.offset();
         long total = jobMapper.selectCount(buildBaseJobQuery(keyword, city, industry, recruitType, salaryMin, education));
-        List<Job> priorityWindowJobs = fetchPriorityWindowJobs(keyword, city, industry, recruitType, salaryMin, education);
+        List<Job> priorityWindowJobs = fetchPriorityWindowJobs(
+                sort, keyword, city, industry, recruitType, salaryMin, education);
         List<Long> priorityWindowJobIds = priorityWindowJobs.stream().map(Job::getId).collect(Collectors.toList());
         int priorityWindowSize = priorityWindowJobs.size();
 
@@ -141,9 +146,6 @@ public class JobServiceImpl implements JobService {
         return resultPage;
     }
 
-    /**
-     * 对窗口内岗位按公司做轮询重排，避免同一家公司连续占据首页。
-     */
     private LambdaQueryWrapper<Job> buildBaseJobQuery(String keyword, String city, String industry,
                                                       String recruitType, Integer salaryMin, String education) {
         LambdaQueryWrapper<Job> wrapper = new LambdaQueryWrapper<>();
@@ -158,12 +160,16 @@ public class JobServiceImpl implements JobService {
         return wrapper;
     }
 
-    private List<Job> fetchPriorityWindowJobs(String keyword, String city, String industry,
+    /**
+     * 查询时先按用户要求选出排序窗口，再仅在窗口内部按公司轮询，
+     * 避免“公司多样性”把窗口外的较旧职位提前。
+     */
+    private List<Job> fetchPriorityWindowJobs(String sort, String keyword, String city, String industry,
                                               String recruitType, Integer salaryMin, String education) {
         LambdaQueryWrapper<Job> wrapper = buildBaseJobQuery(keyword, city, industry, recruitType, salaryMin, education);
-        wrapper.orderByAsc(Job::getId);
-        wrapper.last("LIMIT " + ID_PRIORITY_WINDOW_SIZE);
-        return jobMapper.selectList(wrapper);
+        applyRegularSort(wrapper, sort);
+        wrapper.last("LIMIT " + DIVERSITY_WINDOW_SIZE);
+        return diversifyByCompany(jobMapper.selectList(wrapper));
     }
 
     private List<Job> fetchJobsWithPriorityWindow(Page<Job> page, String sort, String keyword, String city,
@@ -205,12 +211,45 @@ public class JobServiceImpl implements JobService {
 
     private void applyRegularSort(LambdaQueryWrapper<Job> wrapper, String sort) {
         if ("deadline".equals(sort)) {
-            wrapper.orderByAsc(Job::getDeadline);
+            wrapper.orderByAsc(Job::getDeadline)
+                    .orderByDesc(Job::getUpdatedAt)
+                    .orderByDesc(Job::getId);
         } else if ("salary_desc".equals(sort)) {
-            wrapper.orderByDesc(Job::getSalaryMax);
+            wrapper.orderByDesc(Job::getSalaryMax)
+                    .orderByDesc(Job::getUpdatedAt)
+                    .orderByDesc(Job::getId);
         } else {
-            wrapper.orderByDesc(Job::getUpdatedAt);
+            wrapper.orderByDesc(Job::getUpdatedAt)
+                    .orderByDesc(Job::getId);
         }
+    }
+
+    private List<Job> diversifyByCompany(List<Job> sortedJobs) {
+        if (sortedJobs == null || sortedJobs.size() < 2) {
+            return sortedJobs == null ? Collections.emptyList() : new ArrayList<>(sortedJobs);
+        }
+
+        Map<String, Deque<Job>> jobsByCompany = new LinkedHashMap<>();
+        for (Job job : sortedJobs) {
+            String companyKey = job.getCompanyName() == null
+                    ? "job:" + job.getId()
+                    : job.getCompanyName().trim().toLowerCase(Locale.ROOT);
+            jobsByCompany.computeIfAbsent(companyKey, ignored -> new ArrayDeque<>()).add(job);
+        }
+
+        List<Job> diversified = new ArrayList<>(sortedJobs.size());
+        boolean added;
+        do {
+            added = false;
+            for (Deque<Job> companyJobs : jobsByCompany.values()) {
+                Job next = companyJobs.pollFirst();
+                if (next != null) {
+                    diversified.add(next);
+                    added = true;
+                }
+            }
+        } while (added);
+        return diversified;
     }
 
     private List<Job> slicePriorityWindow(List<Job> priorityWindowJobs, long offset, long size) {

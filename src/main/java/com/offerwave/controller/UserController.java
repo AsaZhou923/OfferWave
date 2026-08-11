@@ -5,7 +5,6 @@ import com.offerwave.common.R;
 import com.offerwave.dto.MyJobDto;
 import com.offerwave.dto.UpdateJobStatusDto;
 import com.offerwave.dto.UserPreferenceDto;
-import com.offerwave.dto.UpgradeMembershipDto;
 import com.offerwave.entity.User;
 import com.offerwave.service.TrackingService;
 import com.offerwave.service.UserService;
@@ -80,21 +79,6 @@ public class UserController {
         } else {
             return R.error("更新失败");
         }
-    }
-
-    @PostMapping("/membership/upgrade")
-    @Operation(summary = "模拟升级会员", description = "开发测试接口：将当前用户升级到目标会员等级")
-    public R<?> upgradeMyMembership(
-            @Parameter(description = "升级会员参数") @RequestBody UpgradeMembershipDto upgradeDto) {
-        User currentUser = getCurrentUser();
-        if (currentUser == null) {
-            return handleUnauthenticatedUser();
-        }
-        if (upgradeDto == null || upgradeDto.getTargetLevelId() == null) {
-            return R.error(400, "目标等级ID不能为空");
-        }
-        Map<String, Object> result = userService.upgradeMembership(currentUser.getId(), upgradeDto.getTargetLevelId());
-        return R.success(result);
     }
 
     @PostMapping("/jobs/{job_id}/status")
